@@ -1,6 +1,7 @@
 // 1. Сцена, камера, рендерер
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+// ВАЖНО: near = 0.01, чтобы камера не обрезала поверхность вблизи
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
 camera.position.z = 20;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -9,8 +10,8 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x1a1a2e, 1);
 document.body.appendChild(renderer.domElement);
 
-// 2. Планета
-const globeGeometry = new THREE.SphereGeometry(10, 32, 32); 
+// 2. Планета (Увеличили сегменты до 64, чтобы при сильном зуме сетка была ровной, а не угловатой)
+const globeGeometry = new THREE.SphereGeometry(10, 64, 64); 
 const globeMaterial = new THREE.MeshBasicMaterial({ color: 0x4a4a6a, wireframe: true });
 const globe = new THREE.Mesh(globeGeometry, globeMaterial);
 scene.add(globe);
@@ -21,7 +22,8 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.05;
 controls.enablePan = true; 
 controls.screenSpacePanning = true; 
-controls.minDistance = 10.5; 
+controls.zoomSpeed = 1.5; // Ускорили зум
+controls.minDistance = 10.02; // Приближаем почти к самой поверхности
 controls.maxDistance = 40;
 
 // 4. Переменные игры
@@ -43,7 +45,7 @@ const btnRight = document.getElementById('turn-right');
 const fireBtn = document.getElementById('fire-btn');
 
 // 5. Размеры и создание Главной Базы
-const baseGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.02, 12); 
+const baseGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.02, 16); 
 const baseMaterial = new THREE.MeshBasicMaterial({ color: 0x00aaff }); 
 const mainHub = new THREE.Mesh(baseGeometry, baseMaterial);
 
@@ -147,10 +149,9 @@ window.addEventListener('pointerup', () => {
     }
 });
 
-// 9. НОВАЯ ЛОГИКА ПОЛЕТА (Плоская парабола)
+// 9. Логика полета
 function shootBase() {
     const distance = power * 0.15; 
-    // Вычисляем точку приземления
     const targetPos = selectedBase.position.clone().add(currentDirection.clone().multiplyScalar(distance)).normalize().multiplyScalar(10);
 
     const projectile = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({color: 0xffaa00}));
@@ -159,11 +160,9 @@ function shootBase() {
 
     const startPos = selectedBase.position.clone();
     const startTime = performance.now();
-    const duration = 1000; // 1 секунда полета
+    const duration = 1000; 
     
-    // Вычисляем длину пути, чтобы задать высоту дуги
     const travelDistance = startPos.distanceTo(targetPos);
-    // Высота дуги: максимум 0.4 единицы (для дальних выстрелов), для ближних еще меньше
     const maxHeight = Math.min(travelDistance * 0.2, 0.4); 
 
     function animateFlight() {
@@ -171,16 +170,10 @@ function shootBase() {
         let t = elapsed / duration;
 
         if (t <= 1) {
-            // 1. Движемся по поверхности сферы (интерполяция)
             const surfacePoint = new THREE.Vector3().copy(startPos).lerp(targetPos, t).normalize().multiplyScalar(10);
-            
-            // 2. Добавляем высоту по синусоиде (плавный взлет и падение)
             const heightOffset = Math.sin(t * Math.PI) * maxHeight;
-            
-            // 3. Итоговая позиция
             const normal = surfacePoint.clone().normalize();
             projectile.position.copy(surfacePoint).add(normal.multiplyScalar(heightOffset));
-            
             requestAnimationFrame(animateFlight);
         } else {
             scene.remove(projectile);
