@@ -9,13 +9,37 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x1a1a2e, 1);
 document.body.appendChild(renderer.domElement);
 
-// 2. Планета
+// 2. ДОБАВЛЯЕМ СВЕТ (без него текстуры будут черными)
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Мягкий общий свет
+scene.add(ambientLight);
+const dirLight = new THREE.DirectionalLight(0xffffff, 1); // Направленный свет (как от Солнца)
+dirLight.position.set(5, 3, 5);
+scene.add(dirLight);
+
+// 3. Загружаем текстуру Луны (берем стандартную из примеров Three.js)
+const textureLoader = new THREE.TextureLoader();
+const moonTexture = textureLoader.load('moon.jpg');
+
+// 4. Создаем саму планету с текстурой
 const globeGeometry = new THREE.SphereGeometry(10, 64, 64); 
-const globeMaterial = new THREE.MeshBasicMaterial({ color: 0x4a4a6a, wireframe: true });
+const globeMaterial = new THREE.MeshStandardMaterial({ 
+    map: moonTexture // Накладываем картинку
+});
 const globe = new THREE.Mesh(globeGeometry, globeMaterial);
 scene.add(globe);
 
-// 3. Переменные игры
+// 5. Создаем сетку ПОВЕРХ планеты (чуть большего радиуса, чтобы не сливалась)
+const gridGeometry = new THREE.SphereGeometry(10.01, 64, 64); 
+const gridMaterial = new THREE.MeshBasicMaterial({ 
+    color: 0x4a4a6a, 
+    wireframe: true,
+    transparent: true,
+    opacity: 0.3 // Делаем сетку полупрозрачной
+});
+const gridGlobe = new THREE.Mesh(gridGeometry, gridMaterial);
+scene.add(gridGlobe);
+
+// 6. Переменные игры
 let bases = []; 
 let selectedBase = null; 
 let currentAngle = 0; 
@@ -32,7 +56,7 @@ const btnLeft = document.getElementById('turn-left');
 const btnRight = document.getElementById('turn-right');
 const fireBtn = document.getElementById('fire-btn');
 
-// 4. Создание Главной Базы
+// 7. Создание Главной Базы
 const baseGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.02, 16); 
 const baseMaterial = new THREE.MeshBasicMaterial({ color: 0x00aaff }); 
 const mainHub = new THREE.Mesh(baseGeometry, baseMaterial);
@@ -54,20 +78,18 @@ const arrowHelper = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.
 arrowHelper.visible = false; 
 scene.add(arrowHelper);
 
-// 5. Управление камерой (НОВАЯ ЛОГИКА)
+// 8. Управление камерой
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
-controls.enablePan = true; // Разрешаем сдвиг (ПКМ)
+controls.enablePan = true;
 controls.screenSpacePanning = true;
 controls.zoomSpeed = 1.2;
-// Теперь камера будет смотреть на базу, а не в центр планеты
 controls.target.copy(hubPos); 
-// Можем подлететь на 3 единицы к базе (радиус планеты 10)
 controls.minDistance = 3; 
 controls.maxDistance = 30; 
 
-// 6. Рейкастер (клик по базе)
+// 9. Рейкастер
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
@@ -85,7 +107,6 @@ window.addEventListener('pointerdown', (event) => {
         const clickedMesh = intersects[0].object;
         selectedBase = bases.find(b => b.mesh === clickedMesh);
         
-        // ФОКУСИРУЕМ КАМЕРУ НА БАЗЕ
         controls.target.copy(selectedBase.position);
         
         uiPanel.style.display = 'block';
@@ -100,7 +121,7 @@ window.addEventListener('pointerdown', (event) => {
     }
 });
 
-// 7. Поворот стрелки
+// 10. Поворот стрелки
 btnLeft.addEventListener('click', () => {
     if (!selectedBase) return;
     currentAngle += 15; 
@@ -126,7 +147,7 @@ function updateArrowDirection() {
     arrowHelper.setDirection(currentDirection);
 }
 
-// 8. Заряд и выстрел
+// 11. Заряд и выстрел
 fireBtn.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     if (!selectedBase) return;
@@ -152,7 +173,7 @@ window.addEventListener('pointerup', () => {
     }
 });
 
-// 9. Логика полета
+// 12. Логика полета
 function shootBase() {
     const distance = power * 0.15; 
     const targetPos = selectedBase.position.clone().add(currentDirection.clone().multiplyScalar(distance)).normalize().multiplyScalar(10);
@@ -193,14 +214,11 @@ function createNewBase(pos) {
     bases.push({ mesh: newBase, position: pos.clone() });
 }
 
-// 10. Анимация и защита от проваливания
+// 13. Анимация и защита от проваливания
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
 
-    // ФИКС ПРОВАЛИВАНИЯ:
-    // Если камера оказалась ближе к центру, чем радиус планеты (10) + небольшой зазор (0.5),
-    // мы принудительно выталкиваем её наружу.
     if (camera.position.length() < 10.5) {
         camera.position.setLength(10.5);
     }
