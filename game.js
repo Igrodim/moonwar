@@ -1,6 +1,7 @@
 // 1. Сцена, камера, рендерер
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+// near = 0.01 чтобы камера не прорезала текстуру при сильном приближении
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
 camera.position.z = 20;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -9,34 +10,34 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x1a1a2e, 1);
 document.body.appendChild(renderer.domElement);
 
-// 2. ДОБАВЛЯЕМ СВЕТ (без него текстуры будут черными)
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Мягкий общий свет
+// 2. Свет
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); 
 scene.add(ambientLight);
-const dirLight = new THREE.DirectionalLight(0xffffff, 1); // Направленный свет (как от Солнца)
+const dirLight = new THREE.DirectionalLight(0xffffff, 1); 
 dirLight.position.set(5, 3, 5);
 scene.add(dirLight);
 
-// 3. Загружаем текстуру Луны (берем стандартную из примеров Three.js)
+// 3. Текстура
 const textureLoader = new THREE.TextureLoader();
+// Если ты переименовал свою картинку, убедись, что здесь правильное имя
 const moonTexture = textureLoader.load('moon.jpg');
 
-// 4. Создаем саму планету с текстурой
-const globeGeometry = new THREE.SphereGeometry(10, 64, 64); 
-const globeMaterial = new THREE.MeshStandardMaterial({ 
-    map: moonTexture // Накладываем картинку
-});
+// 4. Планета (УВЕЛИЧИЛИ ПЛОТНОСТЬ ДО 128)
+const globeGeometry = new THREE.SphereGeometry(10, 128, 128); 
+const globeMaterial = new THREE.MeshStandardMaterial({ map: moonTexture });
 const globe = new THREE.Mesh(globeGeometry, globeMaterial);
 scene.add(globe);
 
-// 5. Создаем сетку ПОВЕРХ планеты (чуть большего радиуса, чтобы не сливалась)
-const gridGeometry = new THREE.SphereGeometry(10.01, 64, 64); 
+// 5. Сетка (УВЕЛИЧИЛИ ПЛОТНОСТЬ И СДЕЛАЛИ НЕВИДИМОЙ)
+const gridGeometry = new THREE.SphereGeometry(10.01, 128, 128); 
 const gridMaterial = new THREE.MeshBasicMaterial({ 
     color: 0x4a4a6a, 
     wireframe: true,
     transparent: true,
-    opacity: 0.3 // Делаем сетку полупрозрачной
+    opacity: 0.3 
 });
 const gridGlobe = new THREE.Mesh(gridGeometry, gridMaterial);
+gridGlobe.visible = false; // <--- СКРЫВАЕМ СЕТКУ
 scene.add(gridGlobe);
 
 // 6. Переменные игры
@@ -78,7 +79,7 @@ const arrowHelper = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.
 arrowHelper.visible = false; 
 scene.add(arrowHelper);
 
-// 8. Управление камерой
+// 8. Управление камерой (ПРИБЛИЖЕНИЕ СДЕЛАЛИ МАКСИМАЛЬНЫМ)
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
@@ -86,7 +87,7 @@ controls.enablePan = true;
 controls.screenSpacePanning = true;
 controls.zoomSpeed = 1.2;
 controls.target.copy(hubPos); 
-controls.minDistance = 3; 
+controls.minDistance = 0.1; // <--- Подлетаем почти вплотную
 controls.maxDistance = 30; 
 
 // 9. Рейкастер
@@ -219,11 +220,14 @@ function animate() {
     requestAnimationFrame(animate);
     controls.update();
 
-    if (camera.position.length() < 10.5) {
-        camera.position.setLength(10.5);
+    // Если камера подлетела слишком близко к центру планеты, выталкиваем её
+    if (camera.position.length() < 10.02) {
+        camera.position.setLength(10.02);
     }
 
     renderer.render(scene, camera);
 }
+
+animate();
 
 animate();
