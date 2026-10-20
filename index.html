@@ -3,63 +3,90 @@
 <head>
     <title>MoonWar 3D</title>
     <style>
-        body { margin: 0; padding: 0; background-color: #1a1a2e; overflow: hidden; font-family: Arial, sans-serif; }
-        canvas { display: block; }
+        /* Стили для страницы */
+        body { 
+            margin: 0; 
+            padding: 0; 
+            background-color: #1a1a2e; 
+            overflow: hidden; 
+            font-family: Arial, sans-serif; 
+        }
+        canvas { 
+            display: block; 
+        }
         
-        /* Стили для панели управления */
+        /* Панель управления внизу экрана */
         #ui-panel {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
+            position: absolute; 
+            bottom: 20px; 
+            left: 50%; 
             transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.7);
-            padding: 15px 30px;
+            background: rgba(0, 0, 0, 0.8); 
+            padding: 15px 30px; 
             border-radius: 10px;
-            display: none; /* Скрыто, пока не выбрана база */
-            color: white;
-            text-align: center;
-            border: 2px solid #4a4a6a;
+            display: none; /* Изначально скрыта */
+            color: white; 
+            text-align: center; 
+            border: 2px solid #4a4a6a; 
             user-select: none;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
+        
+        /* Стили для кнопок в панели */
         #ui-panel button {
-            background: #4a4a6a;
-            color: white;
-            border: none;
+            background: #4a4a6a; 
+            color: white; 
+            border: none; 
             padding: 10px 20px;
-            font-size: 18px;
-            cursor: pointer;
-            margin: 5px;
+            font-size: 18px; 
+            cursor: pointer; 
+            margin: 5px; 
             border-radius: 5px;
-        }
-        #ui-panel button:hover { background: #6a6a8a; }
-        
-        /* Шкала силы */
-        #power-bar-container {
-            width: 200px;
-            height: 20px;
-            background: #333;
-            border: 1px solid #fff;
-            margin: 10px auto;
-            position: relative;
-        }
-        #power-bar {
-            width: 0%;
-            height: 100%;
-            background: #ffaa00;
-            transition: width 0.05s;
+            transition: background 0.2s;
         }
         
-        #fire-btn {
-            background: #aa00aa !important;
-            font-weight: bold;
+        #ui-panel button:hover { 
+            background: #6a6a8a; 
+        }
+        
+        /* Шкала силы выстрела */
+        #power-bar-container { 
+            width: 200px; 
+            height: 20px; 
+            background: #333; 
+            border: 1px solid #fff; 
+            margin: 10px auto; 
+            position: relative; 
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        
+        #power-bar { 
+            width: 0%; 
+            height: 100%; 
+            background: #ffaa00; 
+            transition: width 0.05s; 
+        }
+        
+        /* Кнопка выстрела */
+        #fire-btn { 
+            background: #aa00aa !important; 
+            font-weight: bold; 
+            width: 100%;
+        }
+        
+        #fire-btn:hover {
+            background: #cc00cc !important;
         }
     </style>
+    
+    <!-- Подключаем Three.js и плагин управления камерой -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
 
-    <!-- Панель управления -->
+    <!-- Панель управления (появляется при клике на базу) -->
     <div id="ui-panel">
         <div>
             <button id="turn-left">◀</button>
@@ -72,6 +99,8 @@
         <button id="fire-btn">ЗАЖМИ ДЛЯ ВЫСТРЕЛА</button>
     </div>
 
-    <script src="game.js"></script>
+    <!-- ГЛАВНОЕ: Подключаем наш модульный скрипт -->
+    <script type="module" src="main.js"></script>
+    
 </body>
 </html>
