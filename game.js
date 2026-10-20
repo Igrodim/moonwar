@@ -15,22 +15,22 @@ const globeMaterial = new THREE.MeshBasicMaterial({ color: 0x4a4a6a, wireframe: 
 const globe = new THREE.Mesh(globeGeometry, globeMaterial);
 scene.add(globe);
 
-// 3. Управление камерой
+// 3. Управление камерой (исправлен зум)
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
 controls.enablePan = false; 
-controls.minDistance = 12;
+controls.minDistance = 15; // Не даем камере провалиться сквозь планету
 controls.maxDistance = 40;
 
 // 4. Переменные игры
-let bases = []; // Массив всех баз
-let selectedBase = null; // Выбранная база для стрельбы
-let currentAngle = 0; // Угол поворота (направление)
-let isCharging = false; // Заряжается ли выстрел
-let power = 0; // Текущая сила
+let bases = []; 
+let selectedBase = null; 
+let currentAngle = 0; 
+let isCharging = false; 
+let power = 0; 
 let powerInterval = null;
-const maxPower = 10; // Максимальная сила (в размерах базы)
+const maxPower = 10; 
 
 // UI элементы
 const uiPanel = document.getElementById('ui-panel');
@@ -39,21 +39,31 @@ const btnLeft = document.getElementById('turn-left');
 const btnRight = document.getElementById('turn-right');
 const fireBtn = document.getElementById('fire-btn');
 
-// 5. Создаем Главную Базу (Хаб)
-const baseGeometry = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 16); // Плоский диск
-const baseMaterial = new THREE.MeshBasicMaterial({ color: 0x00aaff }); // Синий
+// 5. Размеры и создание Главной Базы
+// РАЗМЕР УМЕНЬШЕН В 10 РАЗ (радиус 0.05)
+const baseGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.02, 12); 
+const baseMaterial = new THREE.MeshBasicMaterial({ color: 0x00aaff }); 
 const mainHub = new THREE.Mesh(baseGeometry, baseMaterial);
 
-// Ставим базу на верхушку сферы (координаты 0, 10, 0)
-mainHub.position.set(0, 10, 0);
-mainHub.lookAt(0, 0, 0); // Поворачиваем к центру
-mainHub.rotation.x += Math.PI / 2; // Цилиндры в Three.js лежат на боку, поворачиваем
-scene.add(mainHub);
-bases.push({ mesh: mainHub, position: new THREE.Vector3(0, 10, 0) });
+// Правильная функция для "укладки" объекта на сферу
+function layFlatOnSphere(mesh, position) {
+    mesh.position.copy(position);
+    // В Three.js цилиндр по умолчанию стоит вдоль оси Y.
+    // Нам нужно повернуть его так, чтобы ось Y совпала с нормалью (направлением от центра)
+    const normal = position.clone().normalize();
+    const up = new THREE.Vector3(0, 1, 0);
+    mesh.quaternion.setFromUnitVectors(up, normal);
+}
 
-// Стрелка направления
-const arrowHelper = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), 1, 0xffff00);
-arrowHelper.visible = false; // Скрываем, пока не выбрана база
+// Ставим главную базу на верхушку
+const hubPos = new THREE.Vector3(0, 10, 0);
+layFlatOnSphere(mainHub, hubPos);
+scene.add(mainHub);
+bases.push({ mesh: mainHub, position: hubPos });
+
+// Стрелка направления (сделаем чуть заметнее)
+const arrowHelper = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), 1, 0xffff00, 0.2, 0.1);
+arrowHelper.visible = false; 
 scene.add(arrowHelper);
 
 // 6. Рейкастер (клик по базе)
@@ -61,7 +71,6 @@ const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
 window.addEventListener('pointerdown', (event) => {
-    // Если кликнули на UI, игнорируем
     if (event.target.tagName === 'BUTTON' || event.target.id === 'power-bar-container') return;
 
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -69,28 +78,21 @@ window.addEventListener('pointerdown', (event) => {
 
     raycaster.setFromCamera(mouse, camera);
     
-    // Ищем пересечения со всеми базами
     const baseMeshes = bases.map(b => b.mesh);
     const intersects = raycaster.intersectObjects(baseMeshes);
 
     if (intersects.length > 0) {
-        // Выбираем базу
         const clickedMesh = intersects[0].object;
         selectedBase = bases.find(b => b.mesh === clickedMesh);
         
-        // Показываем UI
         uiPanel.style.display = 'block';
         
         // Настраиваем стрелку
         arrowHelper.position.copy(selectedBase.position);
-        // Направляем стрелку по касательной к сфере
-        const normal = selectedBase.position.clone().normalize();
-        const tangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
-        arrowHelper.setDirection(tangent);
-        arrowHelper.visible = true;
         currentAngle = 0;
+        updateArrowDirection();
+        arrowHelper.visible = true;
     } else {
-        // Кликнули мимо - скрываем UI
         selectedBase = null;
         uiPanel.style.display = 'none';
         arrowHelper.visible = false;
@@ -100,7 +102,7 @@ window.addEventListener('pointerdown', (event) => {
 // 7. Поворот стрелки
 btnLeft.addEventListener('click', () => {
     if (!selectedBase) return;
-    currentAngle += 15; // Шаг поворота
+    currentAngle += 15; 
     updateArrowDirection();
 });
 
@@ -112,19 +114,10 @@ btnRight.addEventListener('click', () => {
 
 function updateArrowDirection() {
     if (!selectedBase) return;
-    
     const normal = selectedBase.position.clone().normalize();
-    // Базовый вектор (вправо)
     let baseVector = new THREE.Vector3(1, 0, 0);
-    // Если база на полюсе, нужно взять другой вектор
-    if (Math.abs(normal.y) > 0.9) baseVector.set(1, 0, 0);
-    
-    // Вектор касательной
     let tangent = baseVector.cross(normal).normalize();
-    
-    // Вращаем касательную вокруг нормали на нужный угол
     tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(currentAngle));
-    
     arrowHelper.setDirection(tangent);
 }
 
@@ -137,7 +130,6 @@ fireBtn.addEventListener('pointerdown', (e) => {
     power = 0;
     powerBar.style.width = '0%';
     
-    // Увеличиваем силу каждые 50 мс
     powerInterval = setInterval(() => {
         if (power < maxPower) {
             power += 0.2;
@@ -158,51 +150,47 @@ window.addEventListener('pointerup', () => {
     }
 });
 
-// 9. Логика полета и прикрепления
+// 9. Логика полета (Сделали медленнее и красивее)
 function shootBase() {
     const normal = selectedBase.position.clone().normalize();
     const direction = arrowHelper.getWorldDirection(new THREE.Vector3());
     
-    // Вычисляем точку приземления (смещаемся по касательной)
-    // 0.4 - это размер базы. Умножаем на силу.
-    const distance = power * 0.4; 
+    // Так как базы стали маленькими, дистанцию тоже уменьшаем
+    const distance = power * 0.15; 
     const targetPos = selectedBase.position.clone().add(direction.multiplyScalar(distance)).normalize().multiplyScalar(10);
 
-    // Анимация полета (упрощенная - просто перемещаем снаряд по дуге)
-    const projectile = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshBasicMaterial({color: 0xffaa00}));
+    const projectile = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), new THREE.MeshBasicMaterial({color: 0xffaa00}));
     projectile.position.copy(selectedBase.position);
     scene.add(projectile);
 
-    let t = 0;
     const startPos = selectedBase.position.clone();
+    const startTime = performance.now();
+    const duration = 1000; // Полет длится 1 секунду (1000 мс)
     
-    // Анимация
-    const flightInterval = setInterval(() => {
-        t += 0.05;
+    function animateFlight() {
+        const elapsed = performance.now() - startTime;
+        let t = elapsed / duration;
+
         if (t <= 1) {
-            // Квадратичная кривая Безье (дуга)
-            // Контрольная точка выносится наружу от сферы
-            const controlPoint = startPos.clone().add(targetPos).multiplyScalar(0.5).normalize().multiplyScalar(14);
+            // Дуга (квадратичная кривая Безье)
+            const controlPoint = startPos.clone().add(targetPos).multiplyScalar(0.5).normalize().multiplyScalar(12); // Высота дуги
             
-            // Формула Безье
             const p1 = startPos.clone().lerp(controlPoint, t);
             const p2 = controlPoint.clone().lerp(targetPos, t);
             projectile.position.copy(p1.lerp(p2, t));
+            requestAnimationFrame(animateFlight);
         } else {
-            clearInterval(flightInterval);
             scene.remove(projectile);
-            createNewBase(targetPos, direction);
+            createNewBase(targetPos);
         }
-    }, 20);
+    }
+    animateFlight();
 }
 
-function createNewBase(pos, direction) {
-    const newBase = new THREE.Mesh(baseGeometry, new THREE.MeshBasicMaterial({ color: 0xff0000 })); // Красный
-    newBase.position.copy(pos);
-    newBase.lookAt(0, 0, 0);
-    newBase.rotation.x += Math.PI / 2;
+function createNewBase(pos) {
+    const newBase = new THREE.Mesh(baseGeometry, new THREE.MeshBasicMaterial({ color: 0xff0000 })); 
+    layFlatOnSphere(newBase, pos); // Используем правильную функцию посадки
     scene.add(newBase);
-    
     bases.push({ mesh: newBase, position: pos.clone() });
 }
 
