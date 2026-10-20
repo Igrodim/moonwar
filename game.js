@@ -1,9 +1,8 @@
 const config = {
     type: Phaser.AUTO,
-    width: 1920,  // Новое разрешение
-    height: 1080, // Новое разрешение
+    width: 1920,
+    height: 1080,
     backgroundColor: '#1a1a2e',
-    // Масштабирование под размер окна браузера
     scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH
@@ -11,7 +10,7 @@ const config = {
     physics: {
         default: 'arcade',
         arcade: {
-            gravity: { y: 1200 }, // Увеличили гравитацию, так как экран стал больше
+            gravity: { y: 1200 }, // Гравитация
             debug: false
         }
     },
@@ -23,13 +22,11 @@ const config = {
 
 const game = new Phaser.Game(config);
 
-// Увеличиваем размеры тайлов под Full HD
 const tileWidth = 128;
 const tileHeight = 64;
 const gridCols = 16;
 const gridRows = 16;
 
-// Центрируем сетку на экране 1920x1080
 const startX = 960; 
 const startY = 150;
 
@@ -43,10 +40,12 @@ function getIsoCoords(col, row) {
 let hub;
 let aimGraphics;
 let isDragging = false;
+let projectiles = []; // Массив для летящих снарядов
 
 function create() {
+    // 1. Рисуем сетку
     const gridGraphics = this.add.graphics();
-    gridGraphics.lineStyle(3, 0x4a4a6a, 1); // Линии сделали чуть толще
+    gridGraphics.lineStyle(3, 0x4a4a6a, 1);
     for (let row = 0; row < gridRows; row++) {
         for (let col = 0; col < gridCols; col++) {
             const pos = getIsoCoords(col, row);
@@ -54,26 +53,45 @@ function create() {
         }
     }
 
-    // Ставим хаб в центр карты (8,8)
+    // 2. Ставим Хаб
     const hubPos = getIsoCoords(8, 8);
-    hub = this.add.circle(hubPos.x, hubPos.y, 35, 0x00aaff); // Радиус базы увеличили
-    
+    hub = this.add.circle(hubPos.x, hubPos.y, 35, 0x00aaff); 
+    hub.setDepth(2); // Хаб поверх сетки
+
     aimGraphics = this.add.graphics();
 
-    this.input.on('pointerdown', (pointer) => {
+    // 3. Начало прицеливания
+    this.input.on('pointerdown', () => {
         isDragging = true;
     });
 
+    // 4. Отрисовка траектории (движение мыши)
     this.input.on('pointermove', (pointer) => {
         if (!isDragging) return;
         aimGraphics.clear();
-        aimGraphics.lineStyle(4, 0xffff00, 1); // Линия прицела стала толще
-        aimGraphics.lineBetween(hub.x, hub.y, pointer.x, pointer.y);
-        
+
+        const angle = Phaser.Math.Angle.Between(hub.x, hub.y, pointer.x, pointer.y);
+        const distance = Phaser.Math.Distance.Between(hub.x, hub.y, pointer.x, pointer.y);
+        const power = Math.min(distance, 500) * 4; 
+
+        const vx = Math.cos(angle + Math.PI) * power;
+        const vy = Math.sin(angle + Math.PI) * power;
+        const gravity = 1200;
+
+        // Рисуем пунктирную линию (параболу)
         aimGraphics.fillStyle(0xffff00, 1);
-        aimGraphics.fillCircle(pointer.x, pointer.y, 10); // Точка прицела больше
+        for (let t = 0; t < 2; t += 0.05) {
+            let px = hub.x + vx * t;
+            let py = hub.y + vy * t + 0.5 * gravity * t * t;
+            
+            aimGraphics.fillCircle(px, py, 4);
+
+            // Если траектория уходит за нижний край экрана, прекращаем рисовать
+            if (py > 1080) break;
+        }
     });
 
+    // 5. Выстрел (отпускаем мышь)
     this.input.on('pointerup', (pointer) => {
         if (!isDragging) return;
         isDragging = false;
@@ -81,23 +99,62 @@ function create() {
 
         const angle = Phaser.Math.Angle.Between(hub.x, hub.y, pointer.x, pointer.y);
         const distance = Phaser.Math.Distance.Between(hub.x, hub.y, pointer.x, pointer.y);
-        
-        // Увеличили максимальную силу натяжения
         const power = Math.min(distance, 500) * 4; 
 
-        const projectile = this.add.circle(hub.x, hub.y, 20, 0xffaa00); // Снаряд больше
+        // Создаем снаряд
+        const projectile = this.add.circle(hub.x, hub.y, 20, 0xffaa00);
         this.physics.add.existing(projectile);
+        projectile.setDepth(2);
 
         projectile.body.setVelocity(
             Math.cos(angle + Math.PI) * power,
             Math.sin(angle + Math.PI) * power
         );
         
-        this.time.delayedCall(4000, () => { projectile.destroy(); });
+        // Добавляем снаряд в массив, чтобы update() следил за его падением
+        projectiles.push(projectile);
     });
 }
 
-function update() {}
+// Следим за снарядами в реальном времени
+function update() {
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        let proj = projectiles[i];
+
+        // Если снаряд летит вниз (velocity.y > 0)
+        if (proj.body.velocity.y > 0) {
+            // Переводим его экранные координаты в координаты сетки
+            const dx = proj.x - startX;
+            const dy = proj.y - startY;
+
+            let col = Math.round((dx / (tileWidth / 2) + dy / (tileHeight / 2)) / 2);
+            let row = Math.round((dy / (tileHeight / 2) - dx / (tileWidth / 2)) / 2);
+
+            // Если координаты попадают в пределы нашей сетки
+            if (col >= 0 && col < gridCols && row >= 0 && row < gridRows) {
+                const tilePos = getIsoCoords(col, row);
+                
+                // Создаем здание (фиолетовый ромб) на месте падения
+                const building = this.add.polygon(
+                    tilePos.x, tilePos.y,
+                    [0, -tileHeight/2, tileWidth/2, 0, 0, tileHeight/2, -tileWidth/2, 0],
+                    0xaa00aa // Фиолетовый цвет
+                );
+                building.setDepth(1); // Здание поверх сетки
+
+                // Уничтожаем снаряд
+                proj.destroy();
+                projectiles.splice(i, 1);
+            }
+        }
+
+        // Если снаряд улетел за пределы экрана (промах)
+        if (proj.y > 1200 || proj.x < 0 || proj.x > 1920) {
+            proj.destroy();
+            projectiles.splice(i, 1);
+        }
+    }
+}
 
 function drawDiamond(graphics, x, y) {
     graphics.beginPath();
