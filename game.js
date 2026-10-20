@@ -1,7 +1,6 @@
 // 1. Сцена, камера, рендерер
 const scene = new THREE.Scene();
-// ВАЖНО: near = 0.01, чтобы камера не обрезала поверхность вблизи
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 camera.position.z = 20;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -10,23 +9,13 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x1a1a2e, 1);
 document.body.appendChild(renderer.domElement);
 
-// 2. Планета (Увеличили сегменты до 64, чтобы при сильном зуме сетка была ровной, а не угловатой)
+// 2. Планета
 const globeGeometry = new THREE.SphereGeometry(10, 64, 64); 
 const globeMaterial = new THREE.MeshBasicMaterial({ color: 0x4a4a6a, wireframe: true });
 const globe = new THREE.Mesh(globeGeometry, globeMaterial);
 scene.add(globe);
 
-// 3. Управление камерой
-const controls = new THREE.OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.05;
-controls.enablePan = true; 
-controls.screenSpacePanning = true; 
-controls.zoomSpeed = 1.5; // Ускорили зум
-controls.minDistance = 10.02; // Приближаем почти к самой поверхности
-controls.maxDistance = 40;
-
-// 4. Переменные игры
+// 3. Переменные игры
 let bases = []; 
 let selectedBase = null; 
 let currentAngle = 0; 
@@ -34,7 +23,6 @@ let isCharging = false;
 let power = 0; 
 let powerInterval = null;
 const maxPower = 10; 
-
 let currentDirection = new THREE.Vector3(1, 0, 0); 
 
 // UI элементы
@@ -44,7 +32,7 @@ const btnLeft = document.getElementById('turn-left');
 const btnRight = document.getElementById('turn-right');
 const fireBtn = document.getElementById('fire-btn');
 
-// 5. Размеры и создание Главной Базы
+// 4. Создание Главной Базы
 const baseGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.02, 16); 
 const baseMaterial = new THREE.MeshBasicMaterial({ color: 0x00aaff }); 
 const mainHub = new THREE.Mesh(baseGeometry, baseMaterial);
@@ -66,7 +54,20 @@ const arrowHelper = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.
 arrowHelper.visible = false; 
 scene.add(arrowHelper);
 
-// 6. Рейкастер
+// 5. Управление камерой (НОВАЯ ЛОГИКА)
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.enablePan = true; // Разрешаем сдвиг (ПКМ)
+controls.screenSpacePanning = true;
+controls.zoomSpeed = 1.2;
+// Теперь камера будет смотреть на базу, а не в центр планеты
+controls.target.copy(hubPos); 
+// Можем подлететь на 3 единицы к базе (радиус планеты 10)
+controls.minDistance = 3; 
+controls.maxDistance = 30; 
+
+// 6. Рейкастер (клик по базе)
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
@@ -83,6 +84,9 @@ window.addEventListener('pointerdown', (event) => {
     if (intersects.length > 0) {
         const clickedMesh = intersects[0].object;
         selectedBase = bases.find(b => b.mesh === clickedMesh);
+        
+        // ФОКУСИРУЕМ КАМЕРУ НА БАЗЕ
+        controls.target.copy(selectedBase.position);
         
         uiPanel.style.display = 'block';
         arrowHelper.position.copy(selectedBase.position);
@@ -112,7 +116,6 @@ btnRight.addEventListener('click', () => {
 function updateArrowDirection() {
     if (!selectedBase) return;
     const normal = selectedBase.position.clone().normalize();
-    
     let baseVector = new THREE.Vector3(1, 0, 0);
     if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
     
@@ -190,10 +193,18 @@ function createNewBase(pos) {
     bases.push({ mesh: newBase, position: pos.clone() });
 }
 
-// 10. Анимация
+// 10. Анимация и защита от проваливания
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
+
+    // ФИКС ПРОВАЛИВАНИЯ:
+    // Если камера оказалась ближе к центру, чем радиус планеты (10) + небольшой зазор (0.5),
+    // мы принудительно выталкиваем её наружу.
+    if (camera.position.length() < 10.5) {
+        camera.position.setLength(10.5);
+    }
+
     renderer.render(scene, camera);
 }
 
