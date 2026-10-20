@@ -28,7 +28,7 @@ const gridCols = 16;
 const gridRows = 16;
 
 const startX = 960; 
-const startY = 150;
+const startY = 40;
 
 function getIsoCoords(col, row) {
     return {
