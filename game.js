@@ -3,16 +3,16 @@ const config = {
     width: 800,
     height: 600,
     backgroundColor: '#1a1a2e',
-    // Включаем физику (гравитацию)
     physics: {
         default: 'arcade',
         arcade: {
-            gravity: { y: 300 }, // Сила притяжения луны
+            gravity: { y: 400 }, // Гравитация (снаряд будет лететь по дуге)
             debug: false
         }
     },
     scene: {
-        create: create
+        create: create,
+        update: update
     }
 };
 
@@ -20,73 +20,99 @@ const game = new Phaser.Game(config);
 
 const tileWidth = 64;
 const tileHeight = 32;
-const gridCols = 10;
-const gridRows = 10;
+const gridCols = 12; // Сделаем карту чуть больше
+const gridRows = 12;
+
+// Сдвигаем карту выше, чтобы внизу было место для кнопок
 const startX = 400;
-const startY = 100;
+const startY = 50;
+
+// Функция перевода координат сетки (col, row) в экранные пиксели (x, y)
+function getIsoCoords(col, row) {
+    return {
+        x: startX + (col - row) * (tileWidth / 2),
+        y: startY + (col + row) * (tileHeight / 2)
+    };
+}
+
+let hub; // Наш Хаб
+let aimGraphics; // Графика для рисования прицела
+let isDragging = false;
 
 function create() {
-    // 1. Рисуем сетку на фоне
-    const graphics = this.add.graphics();
-    graphics.lineStyle(2, 0x4a4a6a, 1);
+    // 1. Рисуем сетку
+    const gridGraphics = this.add.graphics();
+    gridGraphics.lineStyle(2, 0x4a4a6a, 1);
     for (let row = 0; row < gridRows; row++) {
         for (let col = 0; col < gridCols; col++) {
-            const x = startX + (col - row) * (tileWidth / 2);
-            const y = startY + (col + row) * (tileHeight / 2);
-            drawDiamond(graphics, x, y);
+            const pos = getIsoCoords(col, row);
+            drawDiamond(gridGraphics, pos.x, pos.y);
         }
     }
 
-    // 2. Создаем наш Хаб (базу) внизу экрана
-    this.hub = this.add.circle(400, 500, 20, 0x00aaff); // Синий круг
-    this.physics.add.existing(this.hub, true); // Делаем его статичным (он не падает)
+    // 2. Ставим Хаб в центр карты (колонка 6, ряд 6)
+    const hubPos = getIsoCoords(6, 6);
+    
+    // Создаем контейнер для Хаба, чтобы к нему было удобно привязывать логику
+    hub = this.add.circle(hubPos.x, hubPos.y, 15, 0x00aaff); 
+    
+    // 3. Графика для линии прицела (создаем один раз)
+    aimGraphics = this.add.graphics();
 
-    // 3. Переменные для прицеливания
-    this.isDragging = false;
-    this.aimLine = this.add.line(0, 0, 400, 500, 400, 500, 0xffff00); // Желтая линия прицела
-    this.aimLine.setOrigin(0, 0);
-
-    // 4. Обработка нажатия мыши (начало прицеливания)
+    // 4. Начало прицеливания (клик)
     this.input.on('pointerdown', (pointer) => {
-        this.isDragging = true;
-        this.aimLine.setTo(400, 500, pointer.x, pointer.y);
+        isDragging = true;
     });
 
-    // 5. Обработка движения мыши (натяжение)
+    // 5. Процесс прицеливания (движение мыши)
     this.input.on('pointermove', (pointer) => {
-        if (this.isDragging) {
-            this.aimLine.setTo(400, 500, pointer.x, pointer.y);
-        }
+        if (!isDragging) return;
+        
+        // Очищаем прошлую линию
+        aimGraphics.clear();
+        
+        // Рисуем новую линию от Хаба к курсору
+        aimGraphics.lineStyle(2, 0xffff00, 1);
+        aimGraphics.lineBetween(hub.x, hub.y, pointer.x, pointer.y);
+        
+        // Рисуем небольшой кружок на конце, чтобы было похоже на рогатку
+        aimGraphics.fillStyle(0xffff00, 1);
+        aimGraphics.fillCircle(pointer.x, pointer.y, 5);
     });
 
-    // 6. Обработка отпускания мыши (выстрел)
+    // 6. Выстрел (отпускаем мышь)
     this.input.on('pointerup', (pointer) => {
-        if (!this.isDragging) return;
-        this.isDragging = false;
-        this.aimLine.setTo(400, 500, 400, 500); // Прячем линию
-
-        // Вычисляем силу и направление (от хаба к мышке)
-        // Если натягивать "от" хаба, снаряд полетит в противоположную сторону (как рогатка)
-        const angle = Phaser.Math.Angle.Between(400, 500, pointer.x, pointer.y);
-        const distance = Phaser.Math.Distance.Between(400, 500, pointer.x, pointer.y);
+        if (!isDragging) return;
+        isDragging = false;
         
-        // Ограничиваем максимальную силу
-        const power = Math.min(distance, 300) * 3; 
+        // Очищаем прицел
+        aimGraphics.clear();
 
-        // Создаем снаряд (желтый шарик)
-        const projectile = this.add.circle(400, 500, 10, 0xffff00);
+        // Вычисляем угол и силу (натяжение как в рогатке)
+        // Снаряд полетит в противоположную сторону от курсора
+        const angle = Phaser.Math.Angle.Between(hub.x, hub.y, pointer.x, pointer.y);
+        const distance = Phaser.Math.Distance.Between(hub.x, hub.y, pointer.x, pointer.y);
+        
+        // Ограничиваем силу
+        const power = Math.min(distance, 200) * 4; 
+
+        // Создаем снаряд (желтый шарик) в позиции Хаба
+        const projectile = this.add.circle(hub.x, hub.y, 8, 0xffaa00);
         this.physics.add.existing(projectile);
 
-        // Даем снаряду скорость
-        // Используем угол + Math.PI, чтобы стрелять в противоположную сторону от курсора
+        // Запускаем в противоположную сторону (angle + Math.PI)
         projectile.body.setVelocity(
             Math.cos(angle + Math.PI) * power,
             Math.sin(angle + Math.PI) * power
         );
         
-        // Уничтожаем снаряд через 3 секунды, чтобы не засорять память
-        this.time.delayedCall(3000, () => { projectile.destroy(); });
+        // Уничтожаем снаряд через 4 секунды
+        this.time.delayedCall(4000, () => { projectile.destroy(); });
     });
+}
+
+function update() {
+    // Здесь позже мы будем проверять, приземлился ли снаряд на сетку
 }
 
 function drawDiamond(graphics, x, y) {
