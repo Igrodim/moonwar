@@ -15,13 +15,13 @@ const globeMaterial = new THREE.MeshBasicMaterial({ color: 0x4a4a6a, wireframe: 
 const globe = new THREE.Mesh(globeGeometry, globeMaterial);
 scene.add(globe);
 
-// 3. Управление камерой (исправлен зум и добавлено движение)
+// 3. Управление камерой
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
-controls.enablePan = true; // Разрешаем двигать камеру
+controls.enablePan = true; 
 controls.screenSpacePanning = true; 
-controls.minDistance = 10.5; // Приближаем почти к самой поверхности
+controls.minDistance = 10.5; 
 controls.maxDistance = 40;
 
 // 4. Переменные игры
@@ -33,7 +33,6 @@ let power = 0;
 let powerInterval = null;
 const maxPower = 10; 
 
-// Вектор направления, общий для стрелки и полета
 let currentDirection = new THREE.Vector3(1, 0, 0); 
 
 // UI элементы
@@ -60,7 +59,7 @@ layFlatOnSphere(mainHub, hubPos);
 scene.add(mainHub);
 bases.push({ mesh: mainHub, position: hubPos });
 
-// Стрелка направления (СДЕЛАЛИ КОРОЧЕ)
+// Стрелка направления
 const arrowHelper = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), 0.6, 0xffff00, 0.15, 0.1);
 arrowHelper.visible = false; 
 scene.add(arrowHelper);
@@ -108,7 +107,6 @@ btnRight.addEventListener('click', () => {
     updateArrowDirection();
 });
 
-// ИСПРАВЛЕНИЕ: Теперь стрелка и полет используют ОДИН вектор
 function updateArrowDirection() {
     if (!selectedBase) return;
     const normal = selectedBase.position.clone().normalize();
@@ -116,14 +114,10 @@ function updateArrowDirection() {
     let baseVector = new THREE.Vector3(1, 0, 0);
     if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
     
-    // Вычисляем касательную
     let tangent = baseVector.cross(normal).normalize();
     tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(currentAngle));
     
-    // Сохраняем направление для выстрела
     currentDirection.copy(tangent);
-    
-    // Устанавливаем направление для стрелки
     arrowHelper.setDirection(currentDirection);
 }
 
@@ -153,10 +147,10 @@ window.addEventListener('pointerup', () => {
     }
 });
 
-// 9. Логика полета (Пологий и плавный)
+// 9. НОВАЯ ЛОГИКА ПОЛЕТА (Плоская парабола)
 function shootBase() {
     const distance = power * 0.15; 
-    // Рассчитываем точку приземления, отталкиваясь от текущего направления
+    // Вычисляем точку приземления
     const targetPos = selectedBase.position.clone().add(currentDirection.clone().multiplyScalar(distance)).normalize().multiplyScalar(10);
 
     const projectile = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({color: 0xffaa00}));
@@ -165,21 +159,27 @@ function shootBase() {
 
     const startPos = selectedBase.position.clone();
     const startTime = performance.now();
-    const duration = 1500; // 1.5 секунды для плавности
+    const duration = 1000; // 1 секунда полета
     
+    // Вычисляем длину пути, чтобы задать высоту дуги
+    const travelDistance = startPos.distanceTo(targetPos);
+    // Высота дуги: максимум 0.4 единицы (для дальних выстрелов), для ближних еще меньше
+    const maxHeight = Math.min(travelDistance * 0.2, 0.4); 
+
     function animateFlight() {
         const elapsed = performance.now() - startTime;
         let t = elapsed / duration;
 
         if (t <= 1) {
-            // ПОЛОГАЯ ДУГА: контрольная точка всего на 1.5 выше поверхности
-            const midPoint = startPos.clone().add(targetPos).multiplyScalar(0.5);
-            const controlPoint = midPoint.clone().normalize().multiplyScalar(11.5); // Радиус 10 + 1.5 высоты
+            // 1. Движемся по поверхности сферы (интерполяция)
+            const surfacePoint = new THREE.Vector3().copy(startPos).lerp(targetPos, t).normalize().multiplyScalar(10);
             
-            // Кривая Безье
-            const p1 = startPos.clone().lerp(controlPoint, t);
-            const p2 = controlPoint.clone().lerp(targetPos, t);
-            projectile.position.copy(p1.lerp(p2, t));
+            // 2. Добавляем высоту по синусоиде (плавный взлет и падение)
+            const heightOffset = Math.sin(t * Math.PI) * maxHeight;
+            
+            // 3. Итоговая позиция
+            const normal = surfacePoint.clone().normalize();
+            projectile.position.copy(surfacePoint).add(normal.multiplyScalar(heightOffset));
             
             requestAnimationFrame(animateFlight);
         } else {
@@ -203,7 +203,5 @@ function animate() {
     controls.update();
     renderer.render(scene, camera);
 }
-
-animate();
 
 animate();
