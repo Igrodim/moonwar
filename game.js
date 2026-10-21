@@ -28,8 +28,8 @@ let fogMat;
 
 let isRotatingLeft = false;
 let isRotatingRight = false;
-let isTurningLeft = false; // Флаг для плавного вращения стрелки
-let isTurningRight = false; // Флаг для плавного вращения стрелки
+let isTurningLeft = false; 
+let isTurningRight = false; 
 
 export function initGame(_scene, _camera, _controls) {
     scene = _scene;
@@ -46,7 +46,6 @@ export function initGame(_scene, _camera, _controls) {
     setupEventListeners();
 }
 
-// ПЛАВНОЕ ВРАЩЕНИЕ СТРЕЛКИ В ОСНОВНОМ ЦИКЛЕ (ВЫЗЫВАЕТСЯ ИЗ main.js)
 export function updateArrowRotation() {
     if (selectedBase && !isAITurn && !isShooting) {
         if (isTurningLeft) {
@@ -78,12 +77,6 @@ function centerCameraOnBase(base) {
                          
     camera.position.copy(base.position).add(offset);
     controls.target.copy(base.position);
-    
-    // БЕЗОПАСНЫЙ ВЕКТОР ВЕРХА (чтобы не было переворотов и сбоев Raycaster)
-    const dir = base.position.clone().sub(camera.position).normalize();
-    const safeUp = new THREE.Vector3(0, 1, 0).sub(dir.clone().multiplyScalar(dir.y)).normalize();
-    camera.up.copy(safeUp);
-
     controls.update();
 }
 
@@ -180,7 +173,6 @@ function setupEventListeners() {
     uiElements.rotateRight.addEventListener('pointerup', () => isRotatingRight = false);
     uiElements.rotateRight.addEventListener('pointerleave', () => isRotatingRight = false);
 
-    // КНОПКИ СТРЕЛКИ (БЕЗ setInterval)
     uiElements.btnLeft.addEventListener('pointerdown', () => {
         if (isAITurn || gameOver || !selectedBase || isShooting) return;
         isTurningLeft = true; 
@@ -285,8 +277,6 @@ function setupEventListeners() {
                 alert("Не хватает энергии!");
             }
         }
-
-        // ОЧИЩАЕМ ВСЕ ФЛАГИ ПРИ ОТПУСКАНИИ МЫШИ
         isTurningLeft = false;
         isTurningRight = false;
         isRotatingLeft = false;
@@ -410,9 +400,10 @@ function startGame() {
         layFlatOnSphere(hub, pos);
         scene.add(hub);
         
+        // ИСПРАВЛЕНО ТУТ
         const hitArea = new THREE.Mesh(
             new THREE.SphereGeometry(0.4, 8, 8), 
-            new THREE.MeshBasicMaterial({ visible: false })
+            new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
         );
         hitArea.position.copy(pos);
         scene.add(hitArea);
