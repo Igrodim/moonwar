@@ -21,10 +21,9 @@ const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
 
-// ОТКЛЮЧАЕМ ВСЕ ВСТРОЕННЫЕ МЕХАНИЗМЫ УПРАВЛЕНИЯ, КРОМЕ ЗУМА
+// Отключаем стандартное управление мышью
 controls.enablePan = false; 
 controls.enableRotate = false; 
-
 controls.mouseButtons = {
     LEFT: null,
     MIDDLE: THREE.MOUSE.DOLLY,
@@ -47,8 +46,11 @@ window.addEventListener('resize', () => {
 function animate() {
     requestAnimationFrame(animate);
     
-    controls.update();       
+    // СНАЧАЛА обновляем нашу камеру и наклон
     updateCameraTilt();      
+    
+    // ЗАТЕМ обновляем OrbitControls, чтобы он не сбрасывал наши изменения
+    controls.update();       
     
     renderer.render(scene, camera);
 }
