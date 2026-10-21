@@ -23,18 +23,11 @@ let gameOver = false;
 let isAITurn = false;
 let isShooting = false; 
 
-let currentCameraAzimuth = 0; 
 let fogMat;
 
 let isRotatingLeft = false;
 let isRotatingRight = false;
-const ROTATION_SPEED = 0.02;
-
-// ДЛЯ ПЛАВНОГО ВРАЩЕНИЯ СТРЕЛКИ
-let turnInterval = null; 
-
-let isPanning = false;
-let panMouse = { x: 0, y: 0 };
+let turnInterval = null;
 
 export function initGame(_scene, _camera, _controls) {
     scene = _scene;
@@ -51,46 +44,7 @@ export function initGame(_scene, _camera, _controls) {
     setupEventListeners();
 }
 
-export function updateCameraTilt() {
-    if (!selectedBase || isAITurn || isShooting || isPanning) return;
-
-    if (isRotatingLeft || isRotatingRight) {
-        const target = selectedBase.position;
-        const normal = target.clone().normalize();
-        const step = isRotatingLeft ? ROTATION_SPEED : -ROTATION_SPEED;
-
-        currentCameraAzimuth += step;
-
-        const offset = camera.position.clone().sub(target);
-        offset.applyAxisAngle(normal, step);
-        camera.position.copy(target).add(offset);
-        controls.update();
-    }
-
-    const target = controls.target; 
-    const normal = target.clone().normalize();
-    const dist = camera.position.distanceTo(target);
-    
-    const minDist = 1.5;  
-    const maxDist = 20;   
-    
-    let t = (dist - minDist) / (maxDist - minDist);
-    t = Math.max(0, Math.min(1, t));
-    
-    const targetPhi = THREE.MathUtils.degToRad(10 + 15 * (1 - t)); 
-    
-    const offset = camera.position.clone().sub(target);
-    const currentPhi = offset.angleTo(normal);
-    
-    if (Math.abs(currentPhi - targetPhi) > 0.005) {
-        const axis = new THREE.Vector3().crossVectors(offset, normal).normalize();
-        if (axis.lengthSq() > 0.001) {
-            offset.applyAxisAngle(axis, (currentPhi - targetPhi) * 0.1);
-            camera.position.copy(target).add(offset);
-        }
-    }
-}
-
+// ИДЕАЛЬНАЯ УСТАНОВКА КАМЕРЫ БЕЗ ЛОМАНИЯ МАТРИЦЫ
 function centerCameraOnBase(base) {
     const normal = base.position.clone().normalize();
     let currentDist = camera.position.distanceTo(controls.target);
@@ -100,19 +54,16 @@ function centerCameraOnBase(base) {
 
     let baseTangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
     if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
-    let tangent = baseTangent.applyAxisAngle(normal, currentCameraAzimuth);
     
-    const minDist = 1.5;
-    const maxDist = 20;
-    let t = (currentDist - minDist) / (maxDist - minDist);
-    t = Math.max(0, Math.min(1, t));
-    const targetPhi = THREE.MathUtils.degToRad(10 + 15 * (1 - t));
+    // Фиксированный наклон 15 градусов (безопасно для кликов)
+    const targetPhi = THREE.MathUtils.degToRad(15); 
 
     const offset = normal.clone().multiplyScalar(Math.cos(targetPhi) * currentDist)
-                         .add(tangent.clone().multiplyScalar(Math.sin(targetPhi) * currentDist));
+                         .add(baseTangent.clone().multiplyScalar(Math.sin(targetPhi) * currentDist));
                          
     camera.position.copy(base.position).add(offset);
     controls.target.copy(base.position);
+    camera.up.copy(normal); 
     controls.update();
 }
 
@@ -128,7 +79,7 @@ function setupFogOfWar() {
             varying vec3 vPos; uniform vec4 uSources[50]; uniform int uCount;
             void main() {
                 vec3 normPos = normalize(vPos);
-                float alpha = 0.98; // КАК БЫЛО
+                float alpha = 0.98; // ТУМАН НЕ ТРОГАЕМ
                 for(int i = 0; i < 50; i++) {
                     if(i >= uCount) break;
                     vec3 src = normalize(uSources[i].xyz);
@@ -197,55 +148,6 @@ function stopArrowTurn() {
 }
 
 function setupEventListeners() {
-    window.addEventListener('pointerdown', (e) => {
-        if (e.button === 2 && !isAITurn && !gameOver) {
-            isPanning = true;
-            panMouse.x = e.clientX;
-            panMouse.y = e.clientY;
-        }
-    });
-
-    window.addEventListener('pointermove', (e) => {
-        if (isPanning) {
-            const dx = e.clientX - panMouse.x;
-            const dy = e.clientY - panMouse.y;
-            panMouse.x = e.clientX;
-            panMouse.y = e.clientY;
-
-            const target = controls.target;
-            const normal = target.clone().normalize();
-            
-            let up = new THREE.Vector3(0, 1, 0);
-            let tangentX = new THREE.Vector3().crossVectors(normal, up).normalize();
-            if (tangentX.lengthSq() < 0.01) tangentX.set(1, 0, 0).cross(normal).normalize();
-            let tangentY = new THREE.Vector3().crossVectors(normal, tangentX).normalize();
-            
-            const dist = camera.position.distanceTo(target);
-            const speed = dist * 0.002; // Чуть быстрее и удобнее
-            
-            const moveVec = tangentX.multiplyScalar(-dx * speed).add(tangentY.multiplyScalar(dy * speed));
-            
-            camera.position.add(moveVec);
-            target.add(moveVec);
-            target.setLength(10); 
-
-            const dirToCam = camera.position.clone().sub(target).normalize();
-            camera.position.copy(target).add(dirToCam.multiplyScalar(dist));
-
-            controls.update();
-        }
-    });
-
-    window.addEventListener('pointerup', (e) => {
-        if (e.button === 2) {
-            isPanning = false;
-        }
-        if (e.button === 0) {
-            isRotatingLeft = false;
-            isRotatingRight = false;
-        }
-    });
-
     window.addEventListener('keydown', (e) => {
         if (isAITurn || gameOver || !selectedBase || isShooting) return;
         if (e.repeat) return;
@@ -276,14 +178,14 @@ function setupEventListeners() {
 
     uiElements.btnLeft.addEventListener('pointerdown', () => {
         if (isAITurn || gameOver || !selectedBase || isShooting) return;
-        startArrowTurn(1); // Вращаем влево
+        startArrowTurn(1); 
     });
     uiElements.btnLeft.addEventListener('pointerup', stopArrowTurn);
     uiElements.btnLeft.addEventListener('pointerleave', stopArrowTurn);
 
     uiElements.btnRight.addEventListener('pointerdown', () => {
         if (isAITurn || gameOver || !selectedBase || isShooting) return;
-        startArrowTurn(-1); // Вращаем вправо
+        startArrowTurn(-1); 
     });
     uiElements.btnRight.addEventListener('pointerup', stopArrowTurn);
     uiElements.btnRight.addEventListener('pointerleave', stopArrowTurn);
@@ -522,8 +424,6 @@ function setupRaycaster() {
 
     window.addEventListener('pointerdown', (event) => {
         if (event.button !== 0) return; 
-        
-        isPanning = false; 
         
         if (isAITurn || gameOver || isShooting) return;
         if (event.target.closest('#bottom-panel') || event.target.closest('#ui-panel') || event.target.closest('#start-screen')) return;
