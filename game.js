@@ -400,7 +400,6 @@ function startGame() {
         layFlatOnSphere(hub, pos);
         scene.add(hub);
         
-        // ИСПРАВЛЕНО ТУТ
         const hitArea = new THREE.Mesh(
             new THREE.SphereGeometry(0.4, 8, 8), 
             new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
@@ -435,7 +434,10 @@ function setupRaycaster() {
     window.addEventListener('pointerdown', (event) => {
         if (event.button !== 0) return; 
         
-        if (isAITurn || gameOver || isShooting) return;
+        // ПРИНУДИТЕЛЬНЫЙ СБРОС, ЧТОБЫ КЛИКИ ВСЕГДА ПРОХОДИЛИ
+        isShooting = false;
+        
+        if (isAITurn || gameOver) return;
         if (event.target.closest('#bottom-panel') || event.target.closest('#ui-panel') || event.target.closest('#start-screen')) return;
 
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
