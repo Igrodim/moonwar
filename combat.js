@@ -1,10 +1,10 @@
-import { PLANET_RADIUS, AAO_RADIUS, createNewBase, destroyBaseAndChain } from './entities.js';
+import { PLANET_RADIUS, AAO_RADIUS, createNewBase, destroyBaseAndChain, updateHealthBar } from './entities.js';
 
 export function canShoot(bases, startBase, angle, moduleToBuild) {
-    const ANGLE_STEP = 22.5;
+    const ANGLE_STEP = 11.25; // 32 направления
     const snappedAngle = Math.round(angle / ANGLE_STEP) * ANGLE_STEP;
-    let sector = Math.round(snappedAngle / ANGLE_STEP) % 16;
-    if (sector < 0) sector += 16; 
+    let sector = Math.round(snappedAngle / ANGLE_STEP) % 32;
+    if (sector < 0) sector += 32; 
 
     const isBuildingModule = ['relay', 'dome', 'generator', 'aao', 'drone'].includes(moduleToBuild);
     if (isBuildingModule) {
@@ -95,13 +95,9 @@ export function checkLineIntersection(bases, startPos, endPos, parentBase) {
         
         const existingPoints = b.curve.getPoints(20);
         for (let p1 of newPoints) {
-            // ИГНОРИРУЕМ ТОЧКИ ВБЛИЗИ СТАРТА (чтобы линии не считались пересекающимися в самой базе)
             if (p1.distanceTo(startPos) < 0.25) continue; 
-            
             for (let p2 of existingPoints) {
-                // ИГНОРИРУЕМ ТОЧКИ ВБЛИЗИ СТАРТА
                 if (p2.distanceTo(startPos) < 0.25) continue; 
-                
                 if (p1.distanceTo(p2) < 0.06) return true;
             }
         }
@@ -123,8 +119,9 @@ function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, secto
         return; 
     }
 
-    if (moduleToBuild === 'bomb') { explode(scene, bases, targetPos, 25, 0.10, null, onGameOver); return; }
-    if (moduleToBuild === 'homing') { explode(scene, bases, targetPos, 50, 0.20, null, onGameOver); return; }
+    // УВЕЛИЧЕННЫЕ РАДИУСЫ
+    if (moduleToBuild === 'bomb') { explode(scene, bases, targetPos, 25, 0.20, null, onGameOver); return; }
+    if (moduleToBuild === 'homing') { explode(scene, bases, targetPos, 50, 0.30, null, onGameOver); return; }
 
     if (checkLineIntersection(bases, parentBase.position, targetPos, parentBase)) {
         explode(scene, bases, targetPos, 25, 0.30, null, onGameOver); 
@@ -134,11 +131,11 @@ function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, secto
     let collision = false;
     for (let b of bases) {
         if (b === parentBase) continue; 
-        // Немного увеличил радиус коллизии, чтобы модули не наезжали друг на друга
         if (b.position.distanceTo(targetPos) < 0.2) { 
             collision = true;
             explode(scene, bases, targetPos, 25, 0.30, null, onGameOver);
             b.hp -= 25; 
+            updateHealthBar(b);
             if (b.hp <= 0) destroyBaseAndChain(scene, bases, b, onGameOver);
             break;
         }
@@ -175,6 +172,7 @@ export function explode(scene, bases, pos, damage, radius, owner, onGameOver) {
     for (let b of basesCopy) {
         if (b.position.distanceTo(explosionCenter) < radius) { 
             b.hp -= damage;
+            updateHealthBar(b); // ОБНОВЛЯЕМ ЗДОРОВЬЕ
             showDamageText(scene, b.position, damage);
             if (b.hp <= 0) destroyBaseAndChain(scene, bases, b, onGameOver);
         }
