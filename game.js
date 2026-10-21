@@ -226,8 +226,13 @@ function setupEventListeners() {
 function rotateCameraAroundTarget(angle) {
     if (!selectedBase) return;
     const target = selectedBase.position;
+    // Ось вращения - нормаль планеты в точке базы
+    const normal = target.clone().normalize(); 
     const offset = camera.position.clone().sub(target);
-    offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+
+    // Вращаем вектор смещения камеры вокруг нормали
+    offset.applyAxisAngle(normal, angle);
+
     camera.position.copy(target).add(offset);
     controls.update();
 }
@@ -301,12 +306,7 @@ function endTurn() {
         isAITurn = false;
         uiElements.bottomPanel.style.pointerEvents = 'auto';
         uiElements.bottomPanel.style.opacity = '1';
-        let hub = bases.find(b => b.owner === 1 && b.type === 'hub');
-        if (hub) {
-            camera.position.copy(hub.position.clone().normalize().multiplyScalar(PLANET_RADIUS + 10));
-            controls.target.copy(hub.position);
-            controls.update();
-        }
+        // УДАЛЕН БЛОК ПРИНУДИТЕЛЬНОГО ВОЗВРАТА КАМЕРЫ
     }
 }
 
