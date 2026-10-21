@@ -17,6 +17,7 @@ let playerEnergy = { 1: 0, 2: 0 };
 let playerGenerators = { 1: 0, 2: 0 }; 
 let hasSpunThisTurn = false; 
 let selectedModuleType = null; 
+let gameOver = false;
 
 export function initGame(_scene, _camera, _controls) {
     scene = _scene;
@@ -24,7 +25,7 @@ export function initGame(_scene, _camera, _controls) {
     controls = _controls;
 
     setupUI();
-    createMainBase();
+    createMainBases(); // Создаем сразу два хаба
     setupRaycaster();
     updateUI();
 }
@@ -42,10 +43,8 @@ function setupUI() {
     arrowHelper.visible = false;
     scene.add(arrowHelper);
 
-    // Логика колеса выработки
     spinBtn.addEventListener('click', () => {
-        if (hasSpunThisTurn) return;
-        
+        if (hasSpunThisTurn || gameOver) return;
         const minRoll = 1 + playerGenerators[currentPlayer];
         const maxRoll = 10 + playerGenerators[currentPlayer];
         const rolledEnergy = Math.floor(Math.random() * (maxRoll - minRoll + 1)) + minRoll;
@@ -72,6 +71,7 @@ function setupUI() {
     });
 
     endTurnBtn.addEventListener('click', () => {
+        if (gameOver) return;
         currentPlayer = currentPlayer === 1 ? 2 : 1;
         hasSpunThisTurn = false;
         spinBtn.disabled = false;
@@ -88,7 +88,7 @@ function setupUI() {
 
     fireBtn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
-        if (!selectedBase) return;
+        if (!selectedBase || gameOver) return;
         
         const cost = getModuleCost(selectedModuleType);
         if (playerEnergy[currentPlayer] < cost) { alert("Не хватает энергии!"); return; }
@@ -136,12 +136,28 @@ function updateUI() {
     arrowHelper.setColor(currentPlayer === 1 ? 0x00ffff : 0xff0000);
 }
 
-function createMainBase() {
-    const mainHub = new THREE.Mesh(baseGeometry, new THREE.MeshBasicMaterial({ color: 0x00aaff }));
-    const hubPos = new THREE.Vector3(0, PLANET_RADIUS, 0);
-    layFlatOnSphere(mainHub, hubPos);
-    scene.add(mainHub);
-    bases.push({ mesh: mainHub, position: hubPos, owner: 1, hp: 100, maxHp: 100, type: 'hub' });
+// Генерация двух Хабов на расстоянии
+function createMainBases() {
+    // Генерируем случайную точку для Игрока 1
+    let pos1 = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(PLANET_RADIUS);
+    let pos2;
+
+    // Ищем точку для Игрока 2, чтобы она была достаточно далеко (угол больше 90 градусов)
+    do {
+        pos2 = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(PLANET_RADIUS);
+    } while (pos1.angleTo(pos2) < Math.PI / 2);
+
+    // Создаем синий Хаб (Игрок 1)
+    const hub1 = new THREE.Mesh(baseGeometry, new THREE.MeshBasicMaterial({ color: 0x00aaff }));
+    layFlatOnSphere(hub1, pos1);
+    scene.add(hub1);
+    bases.push({ mesh: hub1, position: pos1, owner: 1, hp: 100, maxHp: 100, type: 'hub', parent: null, lineMesh: null });
+
+    // Создаем красный Хаб (Игрок 2)
+    const hub2 = new THREE.Mesh(baseGeometry, new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+    layFlatOnSphere(hub2, pos2);
+    scene.add(hub2);
+    bases.push({ mesh: hub2, position: pos2, owner: 2, hp: 100, maxHp: 100, type: 'hub', parent: null, lineMesh: null });
 }
 
 function layFlatOnSphere(mesh, position) {
@@ -156,7 +172,7 @@ function setupRaycaster() {
     const mouse = new THREE.Vector2();
 
     window.addEventListener('pointerdown', (event) => {
-        if (event.target.closest('#bottom-panel') || event.target.closest('#ui-panel')) return;
+        if (event.target.closest('#bottom-panel') || event.target.closest('#ui-panel') || gameOver) return;
 
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -169,13 +185,12 @@ function setupRaycaster() {
             const clickedMesh = intersects[0].object;
             const clickedBase = bases.find(b => b.mesh === clickedMesh);
             
-            // ЛЕЧИЛКА
             if (selectedModuleType === 'heal') {
                 if (clickedBase.owner === currentPlayer && playerEnergy[currentPlayer] >= 1) {
                     clickedBase.hp = Math.min(clickedBase.maxHp, clickedBase.hp + 25);
                     playerEnergy[currentPlayer] -= 1;
                     updateUI();
-                    alert(`База вылечена! Текущее HP: ${clickedBase.hp}`);
+                    alert(`База вылечена! HP: ${clickedBase.hp}`);
                 } else if (clickedBase.owner !== currentPlayer) {
                     alert("Нельзя лечить базу противника!");
                 } else {
@@ -184,9 +199,14 @@ function setupRaycaster() {
                 return;
             }
 
-            // ВЫБОР БАЗЫ ДЛЯ СТРЕЛЬБЫ
             if (clickedBase.owner !== currentPlayer) {
                 alert("Это база противника!");
+                return;
+            }
+
+            // ПРОВЕРКА НА СТРЕЛЬБУ ТОЛЬКО С ХАБА ИЛИ РЕЛЕ
+            if (clickedBase.type !== 'hub' && clickedBase.type !== 'relay') {
+                alert("С этого модуля нельзя стрелять! Только с Главного Хаба или Базы-реле.");
                 return;
             }
 
@@ -232,6 +252,7 @@ function shootBase() {
     const maxHeight = Math.min(travelDistance * 0.2, 0.4);
 
     const moduleToBuild = selectedModuleType; 
+    const parentBase = selectedBase; // Запоминаем, откуда выстрелили
 
     function animateFlight() {
         const elapsed = performance.now() - startTime;
@@ -245,38 +266,34 @@ function shootBase() {
         } else {
             scene.remove(projectile);
             
-            // ЕСЛИ ЭТО БОМБА - ВЗРЫВАЕМ
+            // БОМБА (УРОН 25%)
             if (moduleToBuild === 'bomb') {
-                explode(targetPos, 50); // Бомба наносит 50 урона
+                explode(targetPos, 25); 
                 return;
             }
 
-            // ЕСЛИ ЭТО МОДУЛЬ - ПРОВЕРЯЕМ КОЛЛИЗИИ
+            // Проверка коллизий для новых баз
             let collision = false;
             for (let b of bases) {
-                // Если расстояние между центрами баз меньше 0.4 - они пересекаются
                 if (b.position.distanceTo(targetPos) < 0.4) {
                     collision = true;
-                    // Взрыв и урон 25% от макс. HP
                     explode(targetPos, 25);
                     b.hp -= 25; 
-                    if (b.hp <= 0) destroyBase(b);
+                    if (b.hp <= 0) destroyBaseAndChain(b);
                     break;
                 }
             }
 
             if (!collision) {
-                createNewBase(targetPos, startPos, moduleToBuild);
-            } else {
-                console.log("Коллизия! Модуль взорвался.");
+                createNewBase(targetPos, parentBase, moduleToBuild);
             }
         }
     }
     animateFlight();
 }
 
-function createNewBase(pos, parentPos, moduleType) {
-    const playerColor = currentPlayer === 1 ? 0x00aaff : 0xff0000;
+function createNewBase(pos, parentBase, moduleType) {
+    const playerColor = parentBase.owner === 1 ? 0x00aaff : 0xff0000;
     let newBaseColor = playerColor;
     
     if (moduleType === 'generator') newBaseColor = 0x00ff00; 
@@ -286,14 +303,25 @@ function createNewBase(pos, parentPos, moduleType) {
     layFlatOnSphere(newBase, pos);
     scene.add(newBase);
     
-    const baseObj = { mesh: newBase, position: pos.clone(), owner: currentPlayer, hp: 100, maxHp: 100, type: moduleType };
+    // Создаем линию энергии
+    const lineMesh = createEnergyLine(parentBase.position, pos, parentBase.owner);
+
+    const baseObj = { 
+        mesh: newBase, 
+        position: pos.clone(), 
+        owner: parentBase.owner, 
+        hp: 100, 
+        maxHp: 100, 
+        type: moduleType, 
+        parent: parentBase, // Ссылка на родительскую базу
+        lineMesh: lineMesh
+    };
+    
     bases.push(baseObj);
 
-    createEnergyLine(parentPos, pos);
-
     if (moduleType === 'generator') {
-        playerGenerators[currentPlayer]++;
-        alert(`Генератор! Выработка: от ${1 + playerGenerators[currentPlayer]} до ${10 + playerGenerators[currentPlayer]}`);
+        playerGenerators[parentBase.owner]++;
+        alert(`Генератор! Выработка Игрока ${parentBase.owner}: от ${1 + playerGenerators[parentBase.owner]} до ${10 + playerGenerators[parentBase.owner]}`);
     }
     
     if (moduleType === 'dome') {
@@ -305,25 +333,43 @@ function createNewBase(pos, parentPos, moduleType) {
         const up = new THREE.Vector3(0, 1, 0);
         domeMesh.quaternion.setFromUnitVectors(up, normal);
         scene.add(domeMesh);
+        // Линию купола тоже привязываем, чтобы удалялась
+        baseObj.domeMesh = domeMesh; 
     }
 }
 
-function destroyBase(base) {
+// РЕКУРСИВНОЕ УНИЧТОЖЕНИЕ ЦЕПОЧКИ
+function destroyBaseAndChain(base) {
+    console.log(`Уничтожена база типа ${base.type} Игрока ${base.owner}`);
+
+    // 1. Находим всех "детей" этой базы и уничтожаем их
+    const children = bases.filter(b => b.parent === base);
+    children.forEach(child => destroyBaseAndChain(child));
+
+    // 2. Удаляем саму базу из сцены и из памяти
     scene.remove(base.mesh);
-    // Удаляем из массива
+    if (base.lineMesh) scene.remove(base.lineMesh);
+    if (base.domeMesh) scene.remove(base.domeMesh); // Если был купол
+    
     bases = bases.filter(b => b !== base);
-    console.log("База уничтожена!");
+
+    // 3. Проверяем, не был ли это Главный Хаб
+    if (base.type === 'hub') {
+        gameOver = true;
+        const winner = base.owner === 1 ? 2 : 1;
+        alert(`ИГРА ОКОНЧЕНА! Победил Игрок ${winner}!`);
+        // Можно перезагрузить страницу, чтобы начать заново
+        setTimeout(() => { location.reload(); }, 2000);
+    }
 }
 
 function explode(pos, damage) {
-    // Создаем оранжевую сферу (взрыв)
     const explosionGeo = new THREE.SphereGeometry(0.1, 16, 16);
     const explosionMat = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 1 });
     const explosion = new THREE.Mesh(explosionGeo, explosionMat);
     explosion.position.copy(pos).normalize().multiplyScalar(PLANET_RADIUS);
     scene.add(explosion);
 
-    // Анимация расширения и исчезновения
     let scale = 1;
     const interval = setInterval(() => {
         scale += 0.1;
@@ -335,25 +381,27 @@ function explode(pos, damage) {
         }
     }, 30);
 
-    // Наносим урон всем базам в радиусе (примерно 0.8 от точки взрыва)
-    for (let b of bases) {
+    // Ищем задетые базы
+    const basesCopy = [...bases]; // Копия, так как массив будет меняться при уничтожении
+    for (let b of basesCopy) {
         if (b.position.distanceTo(pos.normalize().multiplyScalar(PLANET_RADIUS)) < 0.8) {
             b.hp -= damage;
             alert(`Попадание! Урон: ${damage}. Осталось HP: ${b.hp}`);
             if (b.hp <= 0) {
-                destroyBase(b);
+                destroyBaseAndChain(b);
             }
         }
     }
 }
 
-function createEnergyLine(startPos, endPos) {
+function createEnergyLine(startPos, endPos, owner) {
     const midPoint = startPos.clone().lerp(endPos, 0.5);
     const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + 0.3);
     const curve = new THREE.QuadraticBezierCurve3(startPos, controlPoint, endPos);
     const tubeGeometry = new THREE.TubeGeometry(curve, 20, 0.02, 8, false);
-    const color = currentPlayer === 1 ? 0x00ffff : 0xff0000;
+    const color = owner === 1 ? 0x00ffff : 0xff0000;
     const tubeMaterial = new THREE.MeshBasicMaterial({ color: color });
     const tube = new THREE.Mesh(tubeGeometry, tubeMaterial);
     scene.add(tube);
+    return tube;
 }
