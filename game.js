@@ -28,7 +28,8 @@ let fogMat;
 
 let isRotatingLeft = false;
 let isRotatingRight = false;
-let turnInterval = null;
+let isTurningLeft = false; // Флаг для плавного вращения стрелки
+let isTurningRight = false; // Флаг для плавного вращения стрелки
 
 export function initGame(_scene, _camera, _controls) {
     scene = _scene;
@@ -43,6 +44,21 @@ export function initGame(_scene, _camera, _controls) {
 
     setupFogOfWar();
     setupEventListeners();
+}
+
+// ПЛАВНОЕ ВРАЩЕНИЕ СТРЕЛКИ В ОСНОВНОМ ЦИКЛЕ (ВЫЗЫВАЕТСЯ ИЗ main.js)
+export function updateArrowRotation() {
+    if (selectedBase && !isAITurn && !isShooting) {
+        if (isTurningLeft) {
+            currentAngle += 2;
+            selectedBase.aimAngle = currentAngle;
+            updateArrowDirection();
+        } else if (isTurningRight) {
+            currentAngle -= 2;
+            selectedBase.aimAngle = currentAngle;
+            updateArrowDirection();
+        }
+    }
 }
 
 function centerCameraOnBase(base) {
@@ -62,7 +78,12 @@ function centerCameraOnBase(base) {
                          
     camera.position.copy(base.position).add(offset);
     controls.target.copy(base.position);
-    // УБРАНА СТРОЧКА camera.up.copy(normal); ИЗ-ЗА КОТОРОЙ ЛОМАЛСЯ КЛИК
+    
+    // БЕЗОПАСНЫЙ ВЕКТОР ВЕРХА (чтобы не было переворотов и сбоев Raycaster)
+    const dir = base.position.clone().sub(camera.position).normalize();
+    const safeUp = new THREE.Vector3(0, 1, 0).sub(dir.clone().multiplyScalar(dir.y)).normalize();
+    camera.up.copy(safeUp);
+
     controls.update();
 }
 
@@ -130,24 +151,6 @@ export function updateFogOfWar() {
     });
 }
 
-function startArrowTurn(direction) {
-    if (turnInterval) clearInterval(turnInterval);
-    turnInterval = setInterval(() => {
-        if (selectedBase && !isAITurn && !isShooting) {
-            currentAngle += direction * 2;
-            selectedBase.aimAngle = currentAngle;
-            updateArrowDirection();
-        }
-    }, 30);
-}
-
-function stopArrowTurn() {
-    if (turnInterval) {
-        clearInterval(turnInterval);
-        turnInterval = null;
-    }
-}
-
 function setupEventListeners() {
     window.addEventListener('keydown', (e) => {
         if (isAITurn || gameOver || !selectedBase || isShooting) return;
@@ -177,19 +180,20 @@ function setupEventListeners() {
     uiElements.rotateRight.addEventListener('pointerup', () => isRotatingRight = false);
     uiElements.rotateRight.addEventListener('pointerleave', () => isRotatingRight = false);
 
+    // КНОПКИ СТРЕЛКИ (БЕЗ setInterval)
     uiElements.btnLeft.addEventListener('pointerdown', () => {
         if (isAITurn || gameOver || !selectedBase || isShooting) return;
-        startArrowTurn(1); 
+        isTurningLeft = true; 
     });
-    uiElements.btnLeft.addEventListener('pointerup', stopArrowTurn);
-    uiElements.btnLeft.addEventListener('pointerleave', stopArrowTurn);
+    uiElements.btnLeft.addEventListener('pointerup', () => isTurningLeft = false);
+    uiElements.btnLeft.addEventListener('pointerleave', () => isTurningLeft = false);
 
     uiElements.btnRight.addEventListener('pointerdown', () => {
         if (isAITurn || gameOver || !selectedBase || isShooting) return;
-        startArrowTurn(-1); 
+        isTurningRight = true; 
     });
-    uiElements.btnRight.addEventListener('pointerup', stopArrowTurn);
-    uiElements.btnRight.addEventListener('pointerleave', stopArrowTurn);
+    uiElements.btnRight.addEventListener('pointerup', () => isTurningRight = false);
+    uiElements.btnRight.addEventListener('pointerleave', () => isTurningRight = false);
 
     uiElements.spinBtn.addEventListener('click', () => {
         if (hasSpunThisTurn || gameOver || isAITurn || isShooting) return;
@@ -281,6 +285,12 @@ function setupEventListeners() {
                 alert("Не хватает энергии!");
             }
         }
+
+        // ОЧИЩАЕМ ВСЕ ФЛАГИ ПРИ ОТПУСКАНИИ МЫШИ
+        isTurningLeft = false;
+        isTurningRight = false;
+        isRotatingLeft = false;
+        isRotatingRight = false;
     });
 
     uiElements.startBtn.addEventListener('click', () => {
@@ -317,9 +327,10 @@ function endTurn() {
     if (gameOver) return;
     
     isShooting = false; 
+    isTurningLeft = false;
+    isTurningRight = false;
     isRotatingLeft = false;
     isRotatingRight = false;
-    stopArrowTurn();
     
     uiElements.fireBtn.disabled = false;
     uiElements.fireBtn.innerText = "ЗАЖМИ ДЛЯ ВЫСТРЕЛА";
@@ -488,7 +499,6 @@ function updateArrowDirection() {
     if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
     
     let tangent = baseVector.cross(normal).normalize();
-    // ЗАЩИТА ОТ НУЛЕВОГО ВЕКТОРА
     if (tangent.lengthSq() < 0.1) {
         baseVector.set(0, 0, 1);
         tangent = baseVector.cross(normal).normalize();
