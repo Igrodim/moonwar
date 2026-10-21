@@ -116,7 +116,6 @@ export function playAITurn(gameContext) {
             playerEnergy[currentPlayer] -= cost;
             if (gameContext.updateUI) gameContext.updateUI();
 
-            // УДАЛЕНЫ СТРОКИ ПЕРЕМЕЩЕНИЯ КАМЕРЫ
             let power = ['relay', 'generator'].includes(module) ? 10 : 8;
 
             executeShot(scene, bases, startBase, bestAngle, power, module, check.sector, playerGenerators, onGeneratorBuilt, onGameOver, () => {
