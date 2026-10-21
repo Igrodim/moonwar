@@ -28,8 +28,6 @@ let fogMat;
 
 let isRotatingLeft = false;
 let isRotatingRight = false;
-let isTurningLeft = false; 
-let isTurningRight = false; 
 
 export function initGame(_scene, _camera, _controls) {
     scene = _scene;
@@ -44,20 +42,6 @@ export function initGame(_scene, _camera, _controls) {
 
     setupFogOfWar();
     setupEventListeners();
-}
-
-export function updateArrowRotation() {
-    if (selectedBase && !isAITurn && !isShooting) {
-        if (isTurningLeft) {
-            currentAngle += 2;
-            selectedBase.aimAngle = currentAngle;
-            updateArrowDirection();
-        } else if (isTurningRight) {
-            currentAngle -= 2;
-            selectedBase.aimAngle = currentAngle;
-            updateArrowDirection();
-        }
-    }
 }
 
 function centerCameraOnBase(base) {
@@ -125,7 +109,6 @@ export function updateFogOfWar() {
     bases.forEach(base => {
         if (base.owner === 1) {
             base.mesh.visible = true;
-            if (base.hitArea) base.hitArea.visible = true;
             if (base.lineMesh) base.lineMesh.visible = true;
             if (base.domeMesh) base.domeMesh.visible = true;
             if (base.healthSprite) base.healthSprite.visible = true;
@@ -137,7 +120,6 @@ export function updateFogOfWar() {
             if (ally.position.distanceTo(base.position) < radius) { inVision = true; break; }
         }
         base.mesh.visible = inVision;
-        if (base.hitArea) base.hitArea.visible = inVision;
         if (base.lineMesh) base.lineMesh.visible = inVision && (base.parent ? base.parent.mesh.visible : false);
         if (base.domeMesh) base.domeMesh.visible = inVision;
         if (base.healthSprite) base.healthSprite.visible = inVision;
@@ -173,19 +155,21 @@ function setupEventListeners() {
     uiElements.rotateRight.addEventListener('pointerup', () => isRotatingRight = false);
     uiElements.rotateRight.addEventListener('pointerleave', () => isRotatingRight = false);
 
-    uiElements.btnLeft.addEventListener('pointerdown', () => {
-        if (isAITurn || gameOver || !selectedBase || isShooting) return;
-        isTurningLeft = true; 
+    // ВРАЩЕНИЕ СТРЕЛКИ ПО КЛИКУ
+    uiElements.btnLeft.addEventListener('click', () => { 
+        if (selectedBase && !isAITurn && !isShooting) { 
+            currentAngle += (360 / 128); 
+            selectedBase.aimAngle = currentAngle;
+            updateArrowDirection(); 
+        } 
     });
-    uiElements.btnLeft.addEventListener('pointerup', () => isTurningLeft = false);
-    uiElements.btnLeft.addEventListener('pointerleave', () => isTurningLeft = false);
-
-    uiElements.btnRight.addEventListener('pointerdown', () => {
-        if (isAITurn || gameOver || !selectedBase || isShooting) return;
-        isTurningRight = true; 
+    uiElements.btnRight.addEventListener('click', () => { 
+        if (selectedBase && !isAITurn && !isShooting) { 
+            currentAngle -= (360 / 128); 
+            selectedBase.aimAngle = currentAngle;
+            updateArrowDirection(); 
+        } 
     });
-    uiElements.btnRight.addEventListener('pointerup', () => isTurningRight = false);
-    uiElements.btnRight.addEventListener('pointerleave', () => isTurningRight = false);
 
     uiElements.spinBtn.addEventListener('click', () => {
         if (hasSpunThisTurn || gameOver || isAITurn || isShooting) return;
@@ -277,8 +261,6 @@ function setupEventListeners() {
                 alert("Не хватает энергии!");
             }
         }
-        isTurningLeft = false;
-        isTurningRight = false;
         isRotatingLeft = false;
         isRotatingRight = false;
     });
@@ -317,8 +299,6 @@ function endTurn() {
     if (gameOver) return;
     
     isShooting = false; 
-    isTurningLeft = false;
-    isTurningRight = false;
     isRotatingLeft = false;
     isRotatingRight = false;
     
@@ -400,14 +380,7 @@ function startGame() {
         layFlatOnSphere(hub, pos);
         scene.add(hub);
         
-        const hitArea = new THREE.Mesh(
-            new THREE.SphereGeometry(0.4, 8, 8), 
-            new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
-        );
-        hitArea.position.copy(pos);
-        scene.add(hitArea);
-        
-        let baseObj = { mesh: hub, hitArea: hitArea, position: pos, owner: p, hp: 100, maxHp: 100, type: 'hub', parent: null, angle: 0, lineMesh: null, visionRadius: VISION_RADIUS, aimAngle: 0 };
+        let baseObj = { mesh: hub, position: pos, owner: p, hp: 100, maxHp: 100, type: 'hub', parent: null, angle: 0, lineMesh: null, visionRadius: VISION_RADIUS, aimAngle: 0 };
         bases.push(baseObj);
         createHealthBar(scene, baseObj);
         
@@ -434,10 +407,7 @@ function setupRaycaster() {
     window.addEventListener('pointerdown', (event) => {
         if (event.button !== 0) return; 
         
-        // ПРИНУДИТЕЛЬНЫЙ СБРОС, ЧТОБЫ КЛИКИ ВСЕГДА ПРОХОДИЛИ
-        isShooting = false;
-        
-        if (isAITurn || gameOver) return;
+        if (isAITurn || gameOver) return; // Убрали isShooting из проверки!
         if (event.target.closest('#bottom-panel') || event.target.closest('#ui-panel') || event.target.closest('#start-screen')) return;
 
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -447,12 +417,12 @@ function setupRaycaster() {
         scene.updateMatrixWorld();
         raycaster.setFromCamera(mouse, camera);
         
-        const hitAreas = bases.filter(b => b.hitArea && b.hitArea.visible).map(b => b.hitArea);
-        const intersects = raycaster.intersectObjects(hitAreas);
+        const baseMeshes = bases.filter(b => b.mesh.visible).map(b => b.mesh);
+        const intersects = raycaster.intersectObjects(baseMeshes);
 
         if (intersects.length > 0) {
-            const clickedHitArea = intersects[0].object;
-            const clickedBase = bases.find(b => b.hitArea === clickedHitArea);
+            const clickedMesh = intersects[0].object;
+            const clickedBase = bases.find(b => b.mesh === clickedMesh);
             
             if (selectedModuleType === 'heal') {
                 if (clickedBase.owner === currentPlayer && playerEnergy[currentPlayer] >= 1) {
