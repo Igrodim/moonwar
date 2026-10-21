@@ -25,7 +25,7 @@ export function layFlatOnSphere(mesh, position) {
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
 }
 
-// ПЛАШКА ЗДОРОВЬЯ
+// ПЛАШКА ЗДОРОВЬЯ (УМЕНЬШЕНА В 10 РАЗ)
 export function createHealthBar(scene, base) {
     const canvas = document.createElement('canvas');
     canvas.width = 128;
@@ -35,10 +35,13 @@ export function createHealthBar(scene, base) {
     const tex = new THREE.CanvasTexture(canvas);
     const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
     const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(0.8, 0.2, 1);
+    
+    // БЫЛО 0.8 на 0.2, СТАЛО 0.08 на 0.02
+    sprite.scale.set(0.08, 0.02, 1); 
     
     const normal = base.position.clone().normalize();
-    sprite.position.copy(base.position).add(normal.clone().multiplyScalar(0.4));
+    // Опустили ближе к базе (было 0.4)
+    sprite.position.copy(base.position).add(normal.clone().multiplyScalar(0.15));
     
     base.healthSprite = sprite;
     base.healthCanvas = canvas;
@@ -114,14 +117,14 @@ export function createNewBase(scene, bases, pos, parentBase, moduleType, sector,
         lineMesh: lineData.tube,
         curve: lineData.curve,
         visionRadius: moduleType === 'drone' ? RECON_VISION_RADIUS : VISION_RADIUS,
-        aimAngle: 0 // Запоминаем угол прицела
+        aimAngle: 0
     };
     
     if (moduleType === 'dome') { baseObj.shieldHits = 0; baseObj.isDisabled = false; }
     if (moduleType === 'aao') { baseObj.isActive = true; }
 
     bases.push(baseObj);
-    createHealthBar(scene, baseObj); // Создаем плашку здоровья
+    createHealthBar(scene, baseObj);
 
     if (moduleType === 'generator') {
         playerGenerators[parentBase.owner]++;
@@ -148,7 +151,7 @@ export function destroyBaseAndChain(scene, bases, base, onGameOver) {
     scene.remove(base.mesh);
     if (base.lineMesh) scene.remove(base.lineMesh);
     if (base.domeMesh) scene.remove(base.domeMesh); 
-    if (base.healthSprite) scene.remove(base.healthSprite); // Удаляем плашку
+    if (base.healthSprite) scene.remove(base.healthSprite); 
     
     const index = bases.indexOf(base);
     if (index > -1) bases.splice(index, 1);
