@@ -99,7 +99,6 @@ export function playAITurn(gameContext) {
                     const dist = 10 * 0.15;
                     const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(dist)).normalize().multiplyScalar(PLANET_RADIUS);
 
-                    // Передаем startBase
                     if (!checkLineIntersection(bases, startBase.position, targetPos, startBase)) {
                         allowed = true;
                         bestAngle = check.snappedAngle;
@@ -117,10 +116,7 @@ export function playAITurn(gameContext) {
             playerEnergy[currentPlayer] -= cost;
             if (gameContext.updateUI) gameContext.updateUI();
 
-            camera.position.copy(startBase.position.clone().normalize().multiplyScalar(PLANET_RADIUS + 10));
-            controls.target.copy(startBase.position);
-            controls.update();
-
+            // УДАЛЕНЫ СТРОКИ ПЕРЕМЕЩЕНИЯ КАМЕРЫ
             let power = ['relay', 'generator'].includes(module) ? 10 : 8;
 
             executeShot(scene, bases, startBase, bestAngle, power, module, check.sector, playerGenerators, onGeneratorBuilt, onGameOver, () => {
