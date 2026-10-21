@@ -25,7 +25,7 @@ export function initGame(_scene, _camera, _controls) {
     controls = _controls;
 
     setupUI();
-    createMainBases(); // Создаем сразу два хаба
+    createMainBases(); 
     setupRaycaster();
     updateUI();
 }
@@ -90,6 +90,12 @@ function setupUI() {
         e.preventDefault();
         if (!selectedBase || gameOver) return;
         
+        // СТРОГАЯ ПРОВЕРКА: выбран ли модуль
+        if (!selectedModuleType) {
+            alert("Сначала выберите модуль внизу!");
+            return;
+        }
+
         const cost = getModuleCost(selectedModuleType);
         if (playerEnergy[currentPlayer] < cost) { alert("Не хватает энергии!"); return; }
         
@@ -136,24 +142,19 @@ function updateUI() {
     arrowHelper.setColor(currentPlayer === 1 ? 0x00ffff : 0xff0000);
 }
 
-// Генерация двух Хабов на расстоянии
 function createMainBases() {
-    // Генерируем случайную точку для Игрока 1
     let pos1 = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(PLANET_RADIUS);
     let pos2;
 
-    // Ищем точку для Игрока 2, чтобы она была достаточно далеко (угол больше 90 градусов)
     do {
         pos2 = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(PLANET_RADIUS);
     } while (pos1.angleTo(pos2) < Math.PI / 2);
 
-    // Создаем синий Хаб (Игрок 1)
     const hub1 = new THREE.Mesh(baseGeometry, new THREE.MeshBasicMaterial({ color: 0x00aaff }));
     layFlatOnSphere(hub1, pos1);
     scene.add(hub1);
     bases.push({ mesh: hub1, position: pos1, owner: 1, hp: 100, maxHp: 100, type: 'hub', parent: null, lineMesh: null });
 
-    // Создаем красный Хаб (Игрок 2)
     const hub2 = new THREE.Mesh(baseGeometry, new THREE.MeshBasicMaterial({ color: 0xff0000 }));
     layFlatOnSphere(hub2, pos2);
     scene.add(hub2);
@@ -204,7 +205,6 @@ function setupRaycaster() {
                 return;
             }
 
-            // ПРОВЕРКА НА СТРЕЛЬБУ ТОЛЬКО С ХАБА ИЛИ РЕЛЕ
             if (clickedBase.type !== 'hub' && clickedBase.type !== 'relay') {
                 alert("С этого модуля нельзя стрелять! Только с Главного Хаба или Базы-реле.");
                 return;
@@ -240,7 +240,11 @@ function shootBase() {
     const distance = power * 0.15;
     const targetPos = selectedBase.position.clone().add(currentDirection.clone().multiplyScalar(distance)).normalize().multiplyScalar(PLANET_RADIUS);
 
-    const projectileColor = selectedModuleType === 'bomb' ? 0xff0000 : 0xffaa00;
+    let projectileColor = 0xffaa00;
+    if (selectedModuleType === 'bomb') projectileColor = 0xff0000;
+    if (selectedModuleType === 'homing') projectileColor = 0xff00ff; // Фиолетовая ракета
+    if (selectedModuleType === 'drone') projectileColor = 0x00ffff; // Голубой дрон
+
     const projectile = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: projectileColor }));
     projectile.position.copy(selectedBase.position);
     scene.add(projectile);
@@ -252,7 +256,7 @@ function shootBase() {
     const maxHeight = Math.min(travelDistance * 0.2, 0.4);
 
     const moduleToBuild = selectedModuleType; 
-    const parentBase = selectedBase; // Запоминаем, откуда выстрелили
+    const parentBase = selectedBase; 
 
     function animateFlight() {
         const elapsed = performance.now() - startTime;
@@ -266,13 +270,25 @@ function shootBase() {
         } else {
             scene.remove(projectile);
             
-            // БОМБА (УРОН 25%)
+            // 1. БОМБА (25 УРОНА, НЕ СТРОИТСЯ)
             if (moduleToBuild === 'bomb') {
                 explode(targetPos, 25); 
                 return;
             }
 
-            // Проверка коллизий для новых баз
+            // 2. САМОНАВОДЯЩАЯСЯ РАКЕТА (50 УРОНА, НЕ СТРОИТСЯ)
+            if (moduleToBuild === 'homing') {
+                explode(targetPos, 50); 
+                return;
+            }
+
+            // 3. ДРОН (ПРОСТО ИСЧЕЗАЕТ, ТУМАН ВОЙНЫ ПОЗЖЕ)
+            if (moduleToBuild === 'drone') {
+                console.log("Дрон разведал территорию!");
+                return;
+            }
+
+            // 4. СТРОИТЕЛЬНЫЕ МОДУЛИ (КОЛЛИЗИИ И ПОСТРОЙКА)
             let collision = false;
             for (let b of bases) {
                 if (b.position.distanceTo(targetPos) < 0.4) {
@@ -298,12 +314,12 @@ function createNewBase(pos, parentBase, moduleType) {
     
     if (moduleType === 'generator') newBaseColor = 0x00ff00; 
     if (moduleType === 'dome') newBaseColor = 0xffff00; 
+    if (moduleType === 'aao') newBaseColor = 0xff00ff; // ПВО - фиолетовый
 
     const newBase = new THREE.Mesh(baseGeometry, new THREE.MeshBasicMaterial({ color: newBaseColor }));
     layFlatOnSphere(newBase, pos);
     scene.add(newBase);
     
-    // Создаем линию энергии
     const lineMesh = createEnergyLine(parentBase.position, pos, parentBase.owner);
 
     const baseObj = { 
@@ -313,7 +329,7 @@ function createNewBase(pos, parentBase, moduleType) {
         hp: 100, 
         maxHp: 100, 
         type: moduleType, 
-        parent: parentBase, // Ссылка на родительскую базу
+        parent: parentBase, 
         lineMesh: lineMesh
     };
     
@@ -333,32 +349,26 @@ function createNewBase(pos, parentBase, moduleType) {
         const up = new THREE.Vector3(0, 1, 0);
         domeMesh.quaternion.setFromUnitVectors(up, normal);
         scene.add(domeMesh);
-        // Линию купола тоже привязываем, чтобы удалялась
         baseObj.domeMesh = domeMesh; 
     }
 }
 
-// РЕКУРСИВНОЕ УНИЧТОЖЕНИЕ ЦЕПОЧКИ
 function destroyBaseAndChain(base) {
     console.log(`Уничтожена база типа ${base.type} Игрока ${base.owner}`);
 
-    // 1. Находим всех "детей" этой базы и уничтожаем их
     const children = bases.filter(b => b.parent === base);
     children.forEach(child => destroyBaseAndChain(child));
 
-    // 2. Удаляем саму базу из сцены и из памяти
     scene.remove(base.mesh);
     if (base.lineMesh) scene.remove(base.lineMesh);
-    if (base.domeMesh) scene.remove(base.domeMesh); // Если был купол
+    if (base.domeMesh) scene.remove(base.domeMesh); 
     
     bases = bases.filter(b => b !== base);
 
-    // 3. Проверяем, не был ли это Главный Хаб
     if (base.type === 'hub') {
         gameOver = true;
         const winner = base.owner === 1 ? 2 : 1;
         alert(`ИГРА ОКОНЧЕНА! Победил Игрок ${winner}!`);
-        // Можно перезагрузить страницу, чтобы начать заново
         setTimeout(() => { location.reload(); }, 2000);
     }
 }
@@ -367,7 +377,10 @@ function explode(pos, damage) {
     const explosionGeo = new THREE.SphereGeometry(0.1, 16, 16);
     const explosionMat = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 1 });
     const explosion = new THREE.Mesh(explosionGeo, explosionMat);
-    explosion.position.copy(pos).normalize().multiplyScalar(PLANET_RADIUS);
+    
+    // Защита от изменения исходного вектора
+    const explosionCenter = pos.clone().normalize().multiplyScalar(PLANET_RADIUS);
+    explosion.position.copy(explosionCenter);
     scene.add(explosion);
 
     let scale = 1;
@@ -381,10 +394,9 @@ function explode(pos, damage) {
         }
     }, 30);
 
-    // Ищем задетые базы
-    const basesCopy = [...bases]; // Копия, так как массив будет меняться при уничтожении
+    const basesCopy = [...bases];
     for (let b of basesCopy) {
-        if (b.position.distanceTo(pos.normalize().multiplyScalar(PLANET_RADIUS)) < 0.8) {
+        if (b.position.distanceTo(explosionCenter) < 0.8) {
             b.hp -= damage;
             alert(`Попадание! Урон: ${damage}. Осталось HP: ${b.hp}`);
             if (b.hp <= 0) {
