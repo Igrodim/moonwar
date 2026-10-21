@@ -120,6 +120,7 @@ export function updateFogOfWar() {
 }
 
 function setupEventListeners() {
+    // Вращение с клавиатуры
     window.addEventListener('keydown', (e) => {
         if (isAITurn || gameOver || !selectedBase) return;
         const key = e.key.toLowerCase();
@@ -128,6 +129,16 @@ function setupEventListeners() {
         } else if (key === 'd' || key === 'в') {
             rotateCameraAroundTarget(Math.PI / 18);
         }
+    });
+
+    // Вращение с новых кнопок UI
+    uiElements.rotateLeft.addEventListener('click', () => {
+        if (isAITurn || gameOver || !selectedBase) return;
+        rotateCameraAroundTarget(-Math.PI / 18);
+    });
+    uiElements.rotateRight.addEventListener('click', () => {
+        if (isAITurn || gameOver || !selectedBase) return;
+        rotateCameraAroundTarget(Math.PI / 18);
     });
 
     uiElements.spinBtn.addEventListener('click', () => {
@@ -232,7 +243,7 @@ function rotateCameraAroundTarget(angle) {
     offset.applyAxisAngle(normal, angle);
     camera.position.copy(target).add(offset);
     
-    // Вращаем вектор "верха" камеры, чтобы она не кувыркалась
+    // Вращаем вектор "верха" камеры, чтобы горизонт не кренился
     camera.up.applyAxisAngle(normal, angle);
     
     controls.update();
@@ -344,8 +355,7 @@ function startGame() {
         if (p === 1) {
             camera.position.copy(pos.clone().normalize().multiplyScalar(PLANET_RADIUS + 10));
             controls.target.copy(pos);
-            // Выравниваем верх камеры по нормали базы
-            camera.up.copy(pos.clone().normalize()); 
+            camera.up.copy(pos.clone().normalize()); // Ставим верх ровно по нормали базы
             controls.update();
             selectedBase = baseObj;
             uiElements.uiPanel.style.display = 'block';
@@ -396,8 +406,7 @@ function setupRaycaster() {
 
             selectedBase = clickedBase;
             controls.target.copy(selectedBase.position);
-            // Обновляем верх камеры для новой базы
-            camera.up.copy(selectedBase.position.clone().normalize()); 
+            camera.up.copy(selectedBase.position.clone().normalize()); // Выравниваем камеру под новую базу
             controls.update();
             
             uiElements.uiPanel.style.display = 'block';
