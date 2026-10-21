@@ -25,7 +25,6 @@ export function playAITurn(gameContext) {
 
         let startBase = myBases[Math.floor(Math.random() * myBases.length)];
 
-        // 1. Поиск видимых врагов
         let visibleEnemies = [];
         for (let enemy of bases) {
             if (enemy.owner === currentPlayer) continue;
@@ -45,7 +44,6 @@ export function playAITurn(gameContext) {
         let check;
         let targetBase = null;
 
-        // 2. Логика: Атака или Расширение?
         if (visibleEnemies.length > 0) {
             targetBase = visibleEnemies.reduce((prev, curr) => {
                 return (curr.position.distanceTo(startBase.position) < prev.position.distanceTo(startBase.position)) ? curr : prev;
@@ -71,7 +69,6 @@ export function playAITurn(gameContext) {
             }
         }
 
-        // 3. Вычисление угла
         if (targetBase) {
             const normal = startBase.position.clone().normalize();
             const toEnemy = targetBase.position.clone().sub(startBase.position);
@@ -87,7 +84,6 @@ export function playAITurn(gameContext) {
             bestAngle = Math.random() * 360;
         }
 
-        // 4. Поиск безопасного сектора
         for (let i = 0; i < 16; i++) {
             let testAngle = bestAngle + (i * 22.5);
             check = canShoot(bases, startBase, testAngle, module);
@@ -103,7 +99,8 @@ export function playAITurn(gameContext) {
                     const dist = 10 * 0.15;
                     const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(dist)).normalize().multiplyScalar(PLANET_RADIUS);
 
-                    if (!checkLineIntersection(bases, startBase.position, targetPos)) {
+                    // Передаем startBase
+                    if (!checkLineIntersection(bases, startBase.position, targetPos, startBase)) {
                         allowed = true;
                         bestAngle = check.snappedAngle;
                         break; 
@@ -116,7 +113,6 @@ export function playAITurn(gameContext) {
             }
         }
 
-        // 5. Выстрел / Постройка
         if (allowed && playerEnergy[currentPlayer] >= cost) {
             playerEnergy[currentPlayer] -= cost;
             if (gameContext.updateUI) gameContext.updateUI();
@@ -130,7 +126,7 @@ export function playAITurn(gameContext) {
             executeShot(scene, bases, startBase, bestAngle, power, module, check.sector, playerGenerators, onGeneratorBuilt, onGameOver, () => {
                 if (updateFog) updateFog(); 
                 setTimeout(performAIAction, 1000); 
-            });
+            }, currentPlayer, VISION_RADIUS);
         } else {
             setTimeout(onTurnEnd, 1000);
         }
