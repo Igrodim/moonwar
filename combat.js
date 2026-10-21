@@ -1,17 +1,32 @@
 import { PLANET_RADIUS, AAO_RADIUS, createNewBase, destroyBaseAndChain, updateHealthBar } from './entities.js';
 
 export function canShoot(bases, startBase, angle, moduleToBuild) {
-    const ANGLE_STEP = 11.25; // 32 направления
+    const ANGLE_STEP = 360 / 128; // 2.8125 градусов (128 направлений)
     const snappedAngle = Math.round(angle / ANGLE_STEP) * ANGLE_STEP;
-    let sector = Math.round(snappedAngle / ANGLE_STEP) % 32;
-    if (sector < 0) sector += 32; 
+    
+    // Приводим угол к диапазону 0-360
+    let finalAngle = snappedAngle % 360;
+    if (finalAngle < 0) finalAngle += 360;
 
     const isBuildingModule = ['relay', 'dome', 'generator', 'aao', 'drone'].includes(moduleToBuild);
+    
     if (isBuildingModule) {
-        const existingBuild = bases.find(b => b.parent === startBase && b.sector === sector);
-        if (existingBuild) return { allowed: false, reason: "В этом направлении уже построен модуль!" };
+        // Ищем все существующие постройки от этой базы
+        const children = bases.filter(b => b.parent === startBase);
+        
+        for (let child of children) {
+            // Вычисляем разницу углов
+            let diff = Math.abs(child.aimAngle - finalAngle);
+            if (diff > 180) diff = 360 - diff;
+            
+            // Если разница меньше 7 градусов - запрещаем (чтобы не наслаивались)
+            if (diff < 7) {
+                return { allowed: false, reason: "Слишком близко к другому модулю! Выберите другое направление." };
+            }
+        }
     }
-    return { allowed: true, snappedAngle: snappedAngle, sector: sector };
+    
+    return { allowed: true, snappedAngle: finalAngle, sector: 0 };
 }
 
 export function executeShot(scene, bases, startBase, angle, powerValue, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver, onComplete, playerId, VISION_RADIUS) {
@@ -76,7 +91,7 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
             requestAnimationFrame(animateFlight);
         } else {
             scene.remove(projectile);
-            handleLanding(scene, bases, targetPos, startBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver); 
+            handleLanding(scene, bases, targetPos, startBase, moduleToBuild, angle, playerGenerators, onGeneratorBuilt, onGameOver); 
             if (onComplete) onComplete();
         }
     }
@@ -105,7 +120,7 @@ export function checkLineIntersection(bases, startPos, endPos, parentBase) {
     return false;
 }
 
-function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver) {
+function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, angle, playerGenerators, onGeneratorBuilt, onGameOver) {
     let domeInRange = bases.find(b => b.type === 'dome' && b.owner !== parentBase.owner && b.position.distanceTo(targetPos) < 0.35);
 
     if (domeInRange && !domeInRange.isDisabled) {
@@ -119,7 +134,6 @@ function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, secto
         return; 
     }
 
-    // УВЕЛИЧЕННЫЕ РАДИУСЫ
     if (moduleToBuild === 'bomb') { explode(scene, bases, targetPos, 25, 0.20, null, onGameOver); return; }
     if (moduleToBuild === 'homing') { explode(scene, bases, targetPos, 50, 0.30, null, onGameOver); return; }
 
@@ -142,7 +156,7 @@ function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, secto
     }
 
     if (!collision) {
-        createNewBase(scene, bases, targetPos, parentBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt);
+        createNewBase(scene, bases, targetPos, parentBase, moduleToBuild, angle, playerGenerators, onGeneratorBuilt);
     }
 }
 
@@ -172,7 +186,7 @@ export function explode(scene, bases, pos, damage, radius, owner, onGameOver) {
     for (let b of basesCopy) {
         if (b.position.distanceTo(explosionCenter) < radius) { 
             b.hp -= damage;
-            updateHealthBar(b); // ОБНОВЛЯЕМ ЗДОРОВЬЕ
+            updateHealthBar(b);
             showDamageText(scene, b.position, damage);
             if (b.hp <= 0) destroyBaseAndChain(scene, bases, b, onGameOver);
         }
