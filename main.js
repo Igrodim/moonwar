@@ -21,9 +21,16 @@ const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
 
-// ОТКЛЮЧАЕМ СТАНДАРТНОЕ ПАНОРАМИРОВАНИЕ И ВРАЩЕНИЕ
 controls.enablePan = false; 
-controls.enableRotate = false; 
+controls.enableRotate = true; // ВКЛЮЧАЕМ ВРАЩЕНИЕ
+controls.rotateSpeed = 0.5;
+
+// Настраиваем кнопки: ЛКМ ничего не делает (для выбора баз), ПКМ вращает
+controls.mouseButtons = {
+    LEFT: null,
+    MIDDLE: THREE.MOUSE.DOLLY,
+    RIGHT: THREE.MOUSE.ROTATE
+};
 
 controls.zoomSpeed = 1.2;
 controls.minDistance = 1.5; 
