@@ -22,7 +22,7 @@ let selectedModuleType = null;
 let gameOver = false;
 let isAITurn = false;
 
-let fogMat; // Материал тумана войны
+let fogMat;
 
 export function initGame(_scene, _camera, _controls) {
     scene = _scene;
@@ -37,14 +37,11 @@ export function initGame(_scene, _camera, _controls) {
     setupEventListeners();
 }
 
-// СОЗДАНИЕ ТУМАНА ВОЙНЫ (ШЕЙДЕР)
 function setupFogOfWar() {
-    // Сфера чуть больше планеты (радиус 10.5), чтобы закрывать летящие снаряды
     const fogGeo = new THREE.SphereGeometry(PLANET_RADIUS + 0.5, 64, 64);
     
     fogMat = new THREE.ShaderMaterial({
         uniforms: {
-            // Массив источников света (x, y, z, радиус)
             uSources: { value: Array(50).fill(null).map(() => new THREE.Vector4(0, 0, 0, -1)) },
             uCount: { value: 0 }
         },
@@ -61,26 +58,27 @@ function setupFogOfWar() {
             uniform int uCount;
             void main() {
                 vec3 normPos = normalize(vPos);
-                float alpha = 0.90; // Черный полупрозрачный туман (90%)
+                float alpha = 0.98; 
                 
                 for(int i = 0; i < 50; i++) {
                     if(i >= uCount) break;
                     vec3 src = normalize(uSources[i].xyz);
                     float dist = distance(normPos, src);
                     
-                    // Плавный переход (края зрения)
-                    float localAlpha = smoothstep(uSources[i].w - 0.05, uSources[i].w, dist);
-                    alpha = min(alpha, localAlpha * 0.90);
+                    // Прозрачный в центре, черный на краях радиуса
+                    float localAlpha = smoothstep(uSources[i].w, uSources[i].w + 0.02, dist);
+                    alpha = min(alpha, localAlpha * 0.98);
                 }
-                gl_FragColor = vec4(0.0, 0.0, 0.0, alpha); // Черный цвет
+                gl_FragColor = vec4(0.0, 0.0, 0.0, alpha); 
             }
         `,
         transparent: true,
-        depthWrite: false // Позволяет рендерить поверх остальных объектов
+        depthWrite: false,
+        depthTest: false // РЕНДЕРИМ ТУМАН ПОВЕРХ ВСЕХ ОБЪЕКТОВ
     });
     
     const fogMesh = new THREE.Mesh(fogGeo, fogMat);
-    fogMesh.renderOrder = 999; // Рендерим поверх всего
+    fogMesh.renderOrder = 999;
     scene.add(fogMesh);
 }
 
@@ -88,7 +86,6 @@ export function updateFogOfWar() {
     if (gameOver) return;
     const myBases = bases.filter(b => b.owner === currentPlayer);
     
-    // 1. Обновляем дырки в тумане (шейдер)
     let count = 0;
     for (let i = 0; i < myBases.length && i < 50; i++) {
         let base = myBases[i];
@@ -98,7 +95,6 @@ export function updateFogOfWar() {
     }
     fogMat.uniforms.uCount.value = count;
 
-    // 2. Скрываем 3D-модели врагов, чтобы они не торчали из тумана
     bases.forEach(base => {
         if (base.owner === currentPlayer) {
             base.mesh.visible = true;
@@ -193,7 +189,9 @@ function setupEventListeners() {
                 executeShot(scene, bases, selectedBase, check.snappedAngle, power, selectedModuleType, check.sector, playerGenerators, 
                     (genCount) => alert(`Генератор! Твоя выработка: от ${5 + genCount} до ${8 + genCount}`),
                     (owner) => endGame(owner),
-                    () => updateFogOfWar() 
+                    () => updateFogOfWar(),
+                    currentPlayer,
+                    VISION_RADIUS
                 );
             } else if (power > 0) {
                 alert("Не хватает энергии!");
