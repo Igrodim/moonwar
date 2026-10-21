@@ -38,8 +38,8 @@ window.addEventListener('resize', () => {
 function animate() {
     requestAnimationFrame(animate);
     
-    updateCameraTilt(); // Вызываем каждый кадр для плавного наклона
-    controls.update();
+    controls.update();       // Сначала обрабатываем зум и плавность
+    updateCameraTilt();      // Затем применяем нашу математику наклона
     
     renderer.render(scene, camera);
 }
