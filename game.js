@@ -30,8 +30,7 @@ let isRotatingLeft = false;
 let isRotatingRight = false;
 const ROTATION_SPEED = 0.02;
 
-// ДЛЯ ПЛАВНОГО ВРАЩЕНИЯ СТРЕЛКИ ◀ ▶
-let turnInterval = null; 
+let turnInterval = null;
 
 let isPanning = false;
 let panMouse = { x: 0, y: 0 };
@@ -54,7 +53,6 @@ export function initGame(_scene, _camera, _controls) {
 export function updateCameraTilt() {
     if (!selectedBase || isAITurn || isShooting || isPanning) return;
 
-    // ВРАЩЕНИЕ КАМЕРЫ (A/D)
     if (isRotatingLeft || isRotatingRight) {
         const target = selectedBase.position;
         const normal = target.clone().normalize();
@@ -68,7 +66,6 @@ export function updateCameraTilt() {
         controls.update();
     }
 
-    // НАКЛОН ПРИ ЗУМЕ
     const target = controls.target; 
     const normal = target.clone().normalize();
     const dist = camera.position.distanceTo(target);
@@ -79,7 +76,7 @@ export function updateCameraTilt() {
     let t = (dist - minDist) / (maxDist - minDist);
     t = Math.max(0, Math.min(1, t));
     
-    // Угол от 10 до 25 градусов (чтобы не было ровно 90 и не ломался Raycaster)
+    // Безопасный угол от 10 до 25 градусов, чтобы не ломался Raycaster
     const targetPhi = THREE.MathUtils.degToRad(10 + 15 * (1 - t)); 
     
     const offset = camera.position.clone().sub(target);
@@ -94,7 +91,6 @@ export function updateCameraTilt() {
     }
 }
 
-// ИСПРАВЛЕНО: Убрали camera.up.copy(normal), чтобы камера не переворачивалась
 function centerCameraOnBase(base) {
     const normal = base.position.clone().normalize();
     let currentDist = camera.position.distanceTo(controls.target);
@@ -182,7 +178,6 @@ export function updateFogOfWar() {
     });
 }
 
-// ФУНКЦИИ ДЛЯ ПЛАВНОГО ВРАЩЕНИЯ СТРЕЛКИ
 function startArrowTurn(direction) {
     if (turnInterval) clearInterval(turnInterval);
     turnInterval = setInterval(() => {
@@ -281,17 +276,17 @@ function setupEventListeners() {
     uiElements.rotateRight.addEventListener('pointerup', () => isRotatingRight = false);
     uiElements.rotateRight.addEventListener('pointerleave', () => isRotatingRight = false);
 
-    // КНОПКИ ◀ ▶ (СТРЕЛКА)
+    // КНОПКИ СТРЕЛКИ
     uiElements.btnLeft.addEventListener('pointerdown', () => {
         if (isAITurn || gameOver || !selectedBase || isShooting) return;
-        startArrowTurn(1); // Вращаем влево
+        startArrowTurn(1); // Влево
     });
     uiElements.btnLeft.addEventListener('pointerup', stopArrowTurn);
     uiElements.btnLeft.addEventListener('pointerleave', stopArrowTurn);
 
     uiElements.btnRight.addEventListener('pointerdown', () => {
         if (isAITurn || gameOver || !selectedBase || isShooting) return;
-        startArrowTurn(-1); // Вращаем вправо
+        startArrowTurn(-1); // Вправо
     });
     uiElements.btnRight.addEventListener('pointerup', stopArrowTurn);
     uiElements.btnRight.addEventListener('pointerleave', stopArrowTurn);
