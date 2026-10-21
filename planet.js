@@ -1,6 +1,5 @@
 export function createPlanet(scene) {
     const textureLoader = new THREE.TextureLoader();
-    // Убедись, что файл moon.jpg лежит в корне репозитория
     const moonTexture = textureLoader.load('moon.jpg');
 
     const globeGeometry = new THREE.SphereGeometry(10, 128, 128); 
