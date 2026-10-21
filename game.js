@@ -23,6 +23,7 @@ let gameOver = false;
 let isAITurn = false;
 let isShooting = false; 
 
+let currentCameraAzimuth = 0; 
 let fogMat;
 
 let isRotatingLeft = false;
@@ -44,7 +45,6 @@ export function initGame(_scene, _camera, _controls) {
     setupEventListeners();
 }
 
-// ИДЕАЛЬНАЯ УСТАНОВКА КАМЕРЫ БЕЗ ЛОМАНИЯ МАТРИЦЫ
 function centerCameraOnBase(base) {
     const normal = base.position.clone().normalize();
     let currentDist = camera.position.distanceTo(controls.target);
@@ -55,7 +55,6 @@ function centerCameraOnBase(base) {
     let baseTangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
     if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
     
-    // Фиксированный наклон 15 градусов (безопасно для кликов)
     const targetPhi = THREE.MathUtils.degToRad(15); 
 
     const offset = normal.clone().multiplyScalar(Math.cos(targetPhi) * currentDist)
@@ -79,7 +78,7 @@ function setupFogOfWar() {
             varying vec3 vPos; uniform vec4 uSources[50]; uniform int uCount;
             void main() {
                 vec3 normPos = normalize(vPos);
-                float alpha = 0.98; // ТУМАН НЕ ТРОГАЕМ
+                float alpha = 0.98; 
                 for(int i = 0; i < 50; i++) {
                     if(i >= uCount) break;
                     vec3 src = normalize(uSources[i].xyz);
@@ -112,6 +111,7 @@ export function updateFogOfWar() {
     bases.forEach(base => {
         if (base.owner === 1) {
             base.mesh.visible = true;
+            if (base.hitArea) base.hitArea.visible = true;
             if (base.lineMesh) base.lineMesh.visible = true;
             if (base.domeMesh) base.domeMesh.visible = true;
             if (base.healthSprite) base.healthSprite.visible = true;
@@ -123,6 +123,7 @@ export function updateFogOfWar() {
             if (ally.position.distanceTo(base.position) < radius) { inVision = true; break; }
         }
         base.mesh.visible = inVision;
+        if (base.hitArea) base.hitArea.visible = inVision;
         if (base.lineMesh) base.lineMesh.visible = inVision && (base.parent ? base.parent.mesh.visible : false);
         if (base.domeMesh) base.domeMesh.visible = inVision;
         if (base.healthSprite) base.healthSprite.visible = inVision;
@@ -398,7 +399,15 @@ function startGame() {
         layFlatOnSphere(hub, pos);
         scene.add(hub);
         
-        let baseObj = { mesh: hub, position: pos, owner: p, hp: 100, maxHp: 100, type: 'hub', parent: null, angle: 0, lineMesh: null, visionRadius: VISION_RADIUS, aimAngle: 0 };
+        // НЕВИДИМАЯ ЗОНА КЛИКА ДЛЯ ГЛАВНОЙ БАЗЫ
+        const hitArea = new THREE.Mesh(
+            new THREE.SphereGeometry(0.4, 8, 8), 
+            new THREE.MeshBasicMaterial({ visible: false })
+        );
+        hitArea.position.copy(pos);
+        scene.add(hitArea);
+        
+        let baseObj = { mesh: hub, hitArea: hitArea, position: pos, owner: p, hp: 100, maxHp: 100, type: 'hub', parent: null, angle: 0, lineMesh: null, visionRadius: VISION_RADIUS, aimAngle: 0 };
         bases.push(baseObj);
         createHealthBar(scene, baseObj);
         
@@ -432,14 +441,15 @@ function setupRaycaster() {
         mouse.y = (event.clientY / window.innerHeight) * 2 + 1;
 
         camera.updateMatrixWorld();
+        scene.updateMatrixWorld();
         raycaster.setFromCamera(mouse, camera);
         
-        const baseMeshes = bases.filter(b => b.mesh.visible).map(b => b.mesh);
-        const intersects = raycaster.intersectObjects(baseMeshes);
+        const hitAreas = bases.filter(b => b.hitArea && b.hitArea.visible).map(b => b.hitArea);
+        const intersects = raycaster.intersectObjects(hitAreas);
 
         if (intersects.length > 0) {
-            const clickedMesh = intersects[0].object;
-            const clickedBase = bases.find(b => b.mesh === clickedMesh);
+            const clickedHitArea = intersects[0].object;
+            const clickedBase = bases.find(b => b.hitArea === clickedHitArea);
             
             if (selectedModuleType === 'heal') {
                 if (clickedBase.owner === currentPlayer && playerEnergy[currentPlayer] >= 1) {
