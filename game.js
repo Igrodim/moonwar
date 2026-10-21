@@ -64,6 +64,11 @@ export function updateCameraTilt() {
         if (axis.lengthSq() > 0.001) {
             offset.applyAxisAngle(axis, (currentPhi - targetPhi) * 0.1);
             camera.position.copy(target).add(offset);
+            
+            // Безопасный UP, чтобы не ломался Raycaster
+            const lookDir = target.clone().sub(camera.position).normalize();
+            const right = new THREE.Vector3().crossVectors(lookDir, normal).normalize();
+            camera.up.copy(new THREE.Vector3().crossVectors(right, lookDir).normalize());
         }
     }
 }
@@ -75,7 +80,6 @@ function centerCameraOnBase(base) {
         currentDist = 20; 
     }
 
-    camera.up.copy(normal); 
     let baseTangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
     if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
     let tangent = baseTangent.applyAxisAngle(normal, currentCameraAzimuth);
@@ -91,6 +95,11 @@ function centerCameraOnBase(base) {
                          
     camera.position.copy(base.position).add(offset);
     controls.target.copy(base.position);
+    
+    // ВЫЧИСЛЯЕМ БЕЗОПАСНЫЙ UP (вместо camera.up.copy(normal))
+    const lookDir = base.position.clone().sub(camera.position).normalize();
+    const right = new THREE.Vector3().crossVectors(lookDir, normal).normalize();
+    camera.up.copy(new THREE.Vector3().crossVectors(right, lookDir).normalize());
     
     controls.update();
 }
@@ -280,7 +289,12 @@ function rotateCameraAroundTarget(angle) {
     const offset = camera.position.clone().sub(target);
     offset.applyAxisAngle(normal, angle);
     camera.position.copy(target).add(offset);
-    camera.up.applyAxisAngle(normal, angle);
+    
+    // ВЫЧИСЛЯЕМ БЕЗОПАСНЫЙ UP
+    const lookDir = target.clone().sub(camera.position).normalize();
+    const right = new THREE.Vector3().crossVectors(lookDir, normal).normalize();
+    camera.up.copy(new THREE.Vector3().crossVectors(right, lookDir).normalize());
+    
     controls.update();
 }
 
@@ -412,14 +426,21 @@ function setupRaycaster() {
     const mouse = new THREE.Vector2();
 
     window.addEventListener('pointerdown', (event) => {
-        if (event.button !== 0) return; // Только ЛКМ
-        if (isAITurn || gameOver) return; // Убрали isShooting!
+        if (event.button !== 0) return; 
+        
+        // СБРАСЫВАЕМ БЛОКИРОВКУ, ЕСЛИ ОНА ЗАЛИПЛА
+        if (isShooting) {
+            isShooting = false;
+            uiElements.fireBtn.disabled = false;
+            uiElements.fireBtn.innerText = "ЗАЖМИ ДЛЯ ВЫСТРЕЛА";
+        }
+        
+        if (isAITurn || gameOver) return;
         if (event.target.closest('#bottom-panel') || event.target.closest('#ui-panel') || event.target.closest('#start-screen')) return;
 
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         mouse.y = (event.clientY / window.innerHeight) * 2 + 1;
 
-        // ОБНОВЛЯЕМ МАТРИЦУ КАМЕРЫ, ЧТОБЫ ЛУЧ ТОЧНО ПОПАЛ В БАЗУ
         camera.updateMatrixWorld();
         scene.updateMatrixWorld();
         raycaster.setFromCamera(mouse, camera);
