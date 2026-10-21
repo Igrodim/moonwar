@@ -21,7 +21,6 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
     let tangent = baseVector.cross(normal).normalize();
     tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(angle));
     
-    // ЗАЗОР 0.3, чтобы модули не наслаивались
     const distance = 0.3 + powerValue * 0.15;
     const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(distance)).normalize().multiplyScalar(PLANET_RADIUS);
 
@@ -88,16 +87,22 @@ export function checkLineIntersection(bases, startPos, endPos, parentBase) {
     const midPoint = startPos.clone().lerp(endPos, 0.5);
     const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + 0.3);
     const newCurve = new THREE.QuadraticBezierCurve3(startPos, controlPoint, endPos);
-    const newPoints = newCurve.getPoints(15);
+    const newPoints = newCurve.getPoints(20);
 
     for (let b of bases) {
         if (!b.parent || !b.curve) continue; 
         if (b.parent === parentBase) continue; 
         
-        const existingPoints = b.curve.getPoints(15);
+        const existingPoints = b.curve.getPoints(20);
         for (let p1 of newPoints) {
+            // ИГНОРИРУЕМ ТОЧКИ ВБЛИЗИ СТАРТА (чтобы линии не считались пересекающимися в самой базе)
+            if (p1.distanceTo(startPos) < 0.25) continue; 
+            
             for (let p2 of existingPoints) {
-                if (p1.distanceTo(p2) < 0.05) return true;
+                // ИГНОРИРУЕМ ТОЧКИ ВБЛИЗИ СТАРТА
+                if (p2.distanceTo(startPos) < 0.25) continue; 
+                
+                if (p1.distanceTo(p2) < 0.06) return true;
             }
         }
     }
@@ -129,7 +134,8 @@ function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, secto
     let collision = false;
     for (let b of bases) {
         if (b === parentBase) continue; 
-        if (b.position.distanceTo(targetPos) < 0.15) {
+        // Немного увеличил радиус коллизии, чтобы модули не наезжали друг на друга
+        if (b.position.distanceTo(targetPos) < 0.2) { 
             collision = true;
             explode(scene, bases, targetPos, 25, 0.30, null, onGameOver);
             b.hp -= 25; 
