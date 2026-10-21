@@ -1,4 +1,4 @@
-import { PLANET_RADIUS, playerColors, getGeometry, layFlatOnSphere, VISION_RADIUS, createHealthBar } from './entities.js';
+import { PLANET_RADIUS, playerColors, getGeometry, layFlatOnSphere, VISION_RADIUS, createHealthBar, updateHealthBar } from './entities.js';
 import { executeShot, canShoot } from './combat.js';
 import { playAITurn } from './ai.js';
 import { uiElements, updateUI, clearSelection } from './ui.js';
@@ -22,9 +22,10 @@ let selectedModuleType = null;
 let gameOver = false;
 let isAITurn = false;
 
-// Переменная для хранения текущего поворота камеры
-let currentCameraAzimuth = 0; 
+// БЛОКИРОВКА ВО ВРЕМЯ ПОЛЕТА
+let isShooting = false; 
 
+let currentCameraAzimuth = 0; 
 let fogMat;
 
 export function initGame(_scene, _camera, _controls) {
@@ -41,7 +42,7 @@ export function initGame(_scene, _camera, _controls) {
 }
 
 export function updateCameraTilt() {
-    if (!selectedBase || isAITurn) return;
+    if (!selectedBase || isAITurn || isShooting) return;
     
     const target = selectedBase.position;
     const normal = target.clone().normalize();
@@ -69,15 +70,12 @@ export function updateCameraTilt() {
 
 function centerCameraOnBase(base) {
     const normal = base.position.clone().normalize();
-    
     let currentDist = camera.position.distanceTo(controls.target);
     if (currentDist < 1.5 || currentDist > 25 || isNaN(currentDist)) {
         currentDist = 20; 
     }
 
     camera.up.copy(normal); 
-    
-    // Используем сохраненный угол поворота камеры
     let baseTangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
     if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
     let tangent = baseTangent.applyAxisAngle(normal, currentCameraAzimuth);
@@ -99,43 +97,29 @@ function centerCameraOnBase(base) {
 
 function setupFogOfWar() {
     const fogGeo = new THREE.SphereGeometry(PLANET_RADIUS + 0.5, 64, 64);
-    
     fogMat = new THREE.ShaderMaterial({
         uniforms: {
             uSources: { value: Array(50).fill(null).map(() => new THREE.Vector4(0, 0, 0, -1)) },
             uCount: { value: 0 }
         },
-        vertexShader: `
-            varying vec3 vPos;
-            void main() {
-                vPos = position;
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-        `,
+        vertexShader: `varying vec3 vPos; void main() { vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
         fragmentShader: `
-            varying vec3 vPos;
-            uniform vec4 uSources[50];
-            uniform int uCount;
+            varying vec3 vPos; uniform vec4 uSources[50]; uniform int uCount;
             void main() {
                 vec3 normPos = normalize(vPos);
                 float alpha = 0.98; 
-                
                 for(int i = 0; i < 50; i++) {
                     if(i >= uCount) break;
                     vec3 src = normalize(uSources[i].xyz);
                     float dist = distance(normPos, src);
-                    
                     float localAlpha = smoothstep(uSources[i].w, uSources[i].w + 0.02, dist);
                     alpha = min(alpha, localAlpha * 0.98);
                 }
                 gl_FragColor = vec4(0.0, 0.0, 0.0, alpha); 
             }
         `,
-        transparent: true,
-        depthWrite: false,
-        depthTest: false
+        transparent: true, depthWrite: false, depthTest: false
     });
-    
     const fogMesh = new THREE.Mesh(fogGeo, fogMat);
     fogMesh.renderOrder = 999;
     scene.add(fogMesh);
@@ -144,7 +128,6 @@ function setupFogOfWar() {
 export function updateFogOfWar() {
     if (gameOver) return;
     const myBases = bases.filter(b => b.owner === 1);
-    
     let count = 0;
     for (let i = 0; i < myBases.length && i < 50; i++) {
         let base = myBases[i];
@@ -162,20 +145,13 @@ export function updateFogOfWar() {
             if (base.healthSprite) base.healthSprite.visible = true;
             return;
         }
-
         let inVision = false;
         for (let ally of myBases) {
             const radius = ally.visionRadius || VISION_RADIUS;
-            if (ally.position.distanceTo(base.position) < radius) {
-                inVision = true;
-                break;
-            }
+            if (ally.position.distanceTo(base.position) < radius) { inVision = true; break; }
         }
-
         base.mesh.visible = inVision;
-        if (base.lineMesh) {
-            base.lineMesh.visible = inVision && (base.parent ? base.parent.mesh.visible : false);
-        }
+        if (base.lineMesh) base.lineMesh.visible = inVision && (base.parent ? base.parent.mesh.visible : false);
         if (base.domeMesh) base.domeMesh.visible = inVision;
         if (base.healthSprite) base.healthSprite.visible = inVision;
     });
@@ -183,36 +159,32 @@ export function updateFogOfWar() {
 
 function setupEventListeners() {
     window.addEventListener('keydown', (e) => {
-        if (isAITurn || gameOver || !selectedBase) return;
+        if (isAITurn || gameOver || !selectedBase || isShooting) return;
         const key = e.key.toLowerCase();
-        if (key === 'a' || key === 'ф') {
-            rotateCameraAroundTarget(-Math.PI / 16); // Шаг 11.25 градусов
-        } else if (key === 'd' || key === 'в') {
-            rotateCameraAroundTarget(Math.PI / 16);
-        }
+        if (key === 'a' || key === 'ф') rotateCameraAroundTarget(-Math.PI / 16); 
+        else if (key === 'd' || key === 'в') rotateCameraAroundTarget(Math.PI / 16);
     });
 
     uiElements.rotateLeft.addEventListener('click', () => {
-        if (isAITurn || gameOver || !selectedBase) return;
+        if (isAITurn || gameOver || !selectedBase || isShooting) return;
         rotateCameraAroundTarget(-Math.PI / 16);
     });
     uiElements.rotateRight.addEventListener('click', () => {
-        if (isAITurn || gameOver || !selectedBase) return;
+        if (isAITurn || gameOver || !selectedBase || isShooting) return;
         rotateCameraAroundTarget(Math.PI / 16);
     });
 
     uiElements.spinBtn.addEventListener('click', () => {
-        if (hasSpunThisTurn || gameOver || isAITurn) return;
+        if (hasSpunThisTurn || gameOver || isAITurn || isShooting) return;
         spinEnergy();
     });
 
     uiElements.moduleBtns.forEach(btn => {
         btn.addEventListener('click', () => {
-            if (isAITurn) return;
+            if (isAITurn || isShooting) return;
             uiElements.moduleBtns.forEach(b => b.classList.remove('selected'));
             btn.classList.add('selected');
             selectedModuleType = btn.getAttribute('data-type');
-            
             if (selectedModuleType === 'heal') {
                 uiElements.uiPanel.style.display = 'none';
                 arrowHelper.visible = false;
@@ -221,17 +193,17 @@ function setupEventListeners() {
     });
 
     uiElements.endTurnBtn.addEventListener('click', () => {
-        if (gameOver || isAITurn) return;
+        if (gameOver || isAITurn || isShooting) return;
         endTurn();
     });
 
-    // Шаг стрелки теперь 11.25
-    uiElements.btnLeft.addEventListener('click', () => { if (selectedBase && !isAITurn) { currentAngle += 11.25; updateArrowDirection(); } });
-    uiElements.btnRight.addEventListener('click', () => { if (selectedBase && !isAITurn) { currentAngle -= 11.25; updateArrowDirection(); } });
+    uiElements.btnLeft.addEventListener('click', () => { if (selectedBase && !isAITurn && !isShooting) { currentAngle += 11.25; updateArrowDirection(); } });
+    uiElements.btnRight.addEventListener('click', () => { if (selectedBase && !isAITurn && !isShooting) { currentAngle -= 11.25; updateArrowDirection(); } });
 
     uiElements.fireBtn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
-        if (!selectedBase || gameOver || isAITurn) return;
+        // ДВОЙНАЯ ПРОВЕРКА
+        if (!selectedBase || gameOver || isAITurn || isShooting) return;
         
         if (!selectedModuleType) { alert("Сначала выберите модуль внизу!"); return; }
 
@@ -255,6 +227,9 @@ function setupEventListeners() {
             clearInterval(powerInterval);
             uiElements.powerBar.style.width = '0%';
             
+            // ЕСЛИ МЫ УЖЕ СТРЕЛЯЕМ, ИГНОРИРУЕМ
+            if (isShooting) return; 
+
             const cost = getModuleCost(selectedModuleType);
             if (power > 0 && playerEnergy[currentPlayer] >= cost) {
                 
@@ -264,16 +239,25 @@ function setupEventListeners() {
                     return; 
                 }
 
+                // СТАВИМ БЛОКИРОВКУ И ОТКЛЮЧАЕМ КНОПКУ
+                isShooting = true; 
+                uiElements.fireBtn.disabled = true;
+                uiElements.fireBtn.innerText = "ПОЛЕТ...";
+
                 playerEnergy[currentPlayer] -= cost;
                 updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
-                
-                // Сохраняем угол прицела перед выстрелом
                 selectedBase.aimAngle = currentAngle;
 
                 executeShot(scene, bases, selectedBase, check.snappedAngle, power, selectedModuleType, check.sector, playerGenerators, 
                     (genCount) => alert(`Генератор! Твоя выработка: от ${5 + genCount} до ${8 + genCount}`),
                     (owner) => endGame(owner),
-                    () => updateFogOfWar(),
+                    () => {
+                        // СНИМАЕМ БЛОКИРОВКУ И ВКЛЮЧАЕМ КНОПКУ ОБРАТНО
+                        isShooting = false; 
+                        uiElements.fireBtn.disabled = false;
+                        uiElements.fireBtn.innerText = "ЗАЖМИ ДЛЯ ВЫСТРЕЛА";
+                        updateFogOfWar();
+                    },
                     1, 
                     VISION_RADIUS
                 );
@@ -286,31 +270,21 @@ function setupEventListeners() {
     uiElements.startBtn.addEventListener('click', () => {
         const aiCount = parseInt(uiElements.aiCountInput.value) || 1;
         totalPlayers = 1 + aiCount;
-        
-        for (let i = 1; i <= totalPlayers; i++) {
-            playerEnergy[i] = 0;
-            playerGenerators[i] = 0;
-        }
-
+        for (let i = 1; i <= totalPlayers; i++) { playerEnergy[i] = 0; playerGenerators[i] = 0; }
         uiElements.startScreen.style.display = 'none';
         startGame();
     });
 }
 
 function rotateCameraAroundTarget(angle) {
-    if (!selectedBase) return;
-    
-    currentCameraAzimuth += angle; // СОХРАНЯЕМ УГОЛ КАМЕРЫ
-    
+    if (!selectedBase || isShooting) return;
+    currentCameraAzimuth += angle; 
     const target = selectedBase.position;
     const normal = target.clone().normalize();
-
     const offset = camera.position.clone().sub(target);
     offset.applyAxisAngle(normal, angle);
     camera.position.copy(target).add(offset);
-
     camera.up.applyAxisAngle(normal, angle);
-    
     controls.update();
 }
 
@@ -332,12 +306,15 @@ function spinEnergy() {
     uiElements.spinBtn.disabled = true;
     uiElements.spinBtn.innerText = `+${rolledEnergy}`;
     setTimeout(() => { uiElements.spinBtn.innerText = '⚡'; }, 1000); 
-    
     updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
 }
 
 function endTurn() {
     if (gameOver) return;
+    
+    isShooting = false; 
+    uiElements.fireBtn.disabled = false;
+    uiElements.fireBtn.innerText = "ЗАЖМИ ДЛЯ ВЫСТРЕЛА";
     
     bases.forEach(b => {
         if (b.type === 'dome') {
@@ -423,7 +400,7 @@ function startGame() {
             centerCameraOnBase(selectedBase); 
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(pos);
-            currentAngle = selectedBase.aimAngle; // Загружаем сохраненный угол
+            currentAngle = selectedBase.aimAngle;
             updateArrowDirection();
             arrowHelper.visible = true;
         }
@@ -439,14 +416,13 @@ function setupRaycaster() {
     const mouse = new THREE.Vector2();
 
     window.addEventListener('pointerdown', (event) => {
-        if (isAITurn || gameOver) return;
+        if (isAITurn || gameOver || isShooting) return;
         if (event.target.closest('#bottom-panel') || event.target.closest('#ui-panel') || event.target.closest('#start-screen')) return;
 
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
         raycaster.setFromCamera(mouse, camera);
-        
         const baseMeshes = bases.filter(b => b.mesh.visible).map(b => b.mesh);
         const intersects = raycaster.intersectObjects(baseMeshes);
 
@@ -457,6 +433,7 @@ function setupRaycaster() {
             if (selectedModuleType === 'heal') {
                 if (clickedBase.owner === currentPlayer && playerEnergy[currentPlayer] >= 1) {
                     clickedBase.hp = Math.min(clickedBase.maxHp, clickedBase.hp + 25);
+                    updateHealthBar(clickedBase);
                     playerEnergy[currentPlayer] -= 1;
                     updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
                     alert(`База вылечена! HP: ${clickedBase.hp}`);
@@ -472,7 +449,7 @@ function setupRaycaster() {
             
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(selectedBase.position);
-            currentAngle = selectedBase.aimAngle; // ВОССТАНАВЛИВАЕМ УГОЛ ПРИЦЕЛА
+            currentAngle = selectedBase.aimAngle;
             updateArrowDirection();
             arrowHelper.visible = true;
         } else {
