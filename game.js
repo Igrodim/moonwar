@@ -19,6 +19,10 @@ let hasSpunThisTurn = false;
 let selectedModuleType = null; 
 let gameOver = false;
 
+// Радиусы защиты (теперь одинаковые)
+const DOME_RADIUS = 0.35; 
+const AAO_RADIUS = 0.35; // <--- ИЗМЕНЕНО С 0.8 НА 0.35
+
 export function initGame(_scene, _camera, _controls) {
     scene = _scene;
     camera = _camera;
@@ -80,6 +84,20 @@ function setupUI() {
         selectedBase = null;
         document.getElementById('ui-panel').style.display = 'none';
         arrowHelper.visible = false;
+        
+        // ВОССТАНОВЛЕНИЕ КУПОЛОВ И ПВО В НАЧАЛЕ НОВОГО ХОДА
+        bases.forEach(b => {
+            if (b.type === 'dome') {
+                b.shieldHits = 0;
+                b.isDisabled = false;
+                if (b.domeMesh) b.domeMesh.visible = true;
+            }
+            if (b.type === 'aao') {
+                b.isActive = true;
+                b.mesh.material.color.setHex(0xff00ff); // Возвращаем фиолетовый цвет
+            }
+        });
+
         updateUI();
     });
 
@@ -255,12 +273,28 @@ function shootBase() {
     const maxHeight = Math.min(travelDistance * 0.2, 0.4);
 
     const moduleToBuild = selectedModuleType; 
-    const parentBase = selectedBase; // Запоминаем базу, из которой стреляли
+    const parentBase = selectedBase;
 
     function animateFlight() {
         const elapsed = performance.now() - startTime;
         let t = elapsed / duration;
+        
         if (t <= 1) {
+            // 1. ПРОВЕРКА ПВО В ПОЛЕТЕ
+            for (let b of bases) {
+                if (b.type === 'aao' && b.isActive && b.owner !== parentBase.owner) {
+                    if (b.position.distanceTo(projectile.position) < AAO_RADIUS) {
+                        b.isActive = false;
+                        b.mesh.material.color.setHex(0x555555); // Серый цвет (неактивно)
+                        explode(projectile.position, 0); // Визуальный взрыв
+                        scene.remove(projectile);
+                        console.log("Снаряд сбит ПВО!");
+                        return; // Снаряд уничтожен
+                    }
+                }
+            }
+
+            // 2. ДВИЖЕНИЕ
             const surfacePoint = new THREE.Vector3().copy(startPos).lerp(targetPos, t).normalize().multiplyScalar(PLANET_RADIUS);
             const heightOffset = Math.sin(t * Math.PI) * maxHeight;
             const normal = surfacePoint.clone().normalize();
@@ -268,36 +302,51 @@ function shootBase() {
             requestAnimationFrame(animateFlight);
         } else {
             scene.remove(projectile);
-            
-            // Бомбы и ракеты просто взрываются
-            if (moduleToBuild === 'bomb') { explode(targetPos, 25); return; }
-            if (moduleToBuild === 'homing') { explode(targetPos, 50); return; }
-            if (moduleToBuild === 'drone') { console.log("Дрон разведал территорию!"); return; }
-
-            // Строительные модули (коллизии и постройка)
-            let collision = false;
-            for (let b of bases) {
-                // ИГНОРИРУЕМ БАЗУ, ИЗ КОТОРОЙ СТРЕЛЯЛИ
-                if (b === parentBase) continue; 
-
-                // УМЕНЬШИЛИ РАДИУС КОЛЛИЗИИ (было 0.4, стало 0.15)
-                if (b.position.distanceTo(targetPos) < 0.15) {
-                    collision = true;
-                    explode(targetPos, 25);
-                    b.hp -= 25; 
-                    if (b.hp <= 0) destroyBaseAndChain(b);
-                    break;
-                }
-            }
-
-            if (!collision) {
-                createNewBase(targetPos, parentBase, moduleToBuild);
-            } else {
-                console.log("Коллизия! Модуль взорвался.");
-            }
+            handleLanding(targetPos, parentBase, moduleToBuild);
         }
     }
     animateFlight();
+}
+
+function handleLanding(targetPos, parentBase, moduleToBuild) {
+    // 1. ПРОВЕРКА КУПОЛА
+    let domeInRange = bases.find(b => b.type === 'dome' && b.owner !== parentBase.owner && b.position.distanceTo(targetPos) < DOME_RADIUS);
+
+    if (domeInRange && !domeInRange.isDisabled) {
+        if (moduleToBuild === 'bomb') domeInRange.shieldHits += 1;
+        if (moduleToBuild === 'homing') domeInRange.shieldHits += 2;
+
+        if (domeInRange.shieldHits >= 2) {
+            domeInRange.isDisabled = true;
+            if (domeInRange.domeMesh) domeInRange.domeMesh.visible = false;
+            console.log("Купол отключен!");
+        }
+        
+        explode(targetPos, 0);
+        return; 
+    }
+
+    // 2. ЛОГИКА ДЛЯ БОМБ И РАКЕТ
+    if (moduleToBuild === 'bomb') { explode(targetPos, 25); return; }
+    if (moduleToBuild === 'homing') { explode(targetPos, 50); return; }
+    if (moduleToBuild === 'drone') { console.log("Дрон разведал!"); return; }
+
+    // 3. СТРОИТЕЛЬСТВО (КОЛЛИЗИИ)
+    let collision = false;
+    for (let b of bases) {
+        if (b === parentBase) continue; 
+        if (b.position.distanceTo(targetPos) < 0.15) {
+            collision = true;
+            explode(targetPos, 25);
+            b.hp -= 25; 
+            if (b.hp <= 0) destroyBaseAndChain(b);
+            break;
+        }
+    }
+
+    if (!collision) {
+        createNewBase(targetPos, parentBase, moduleToBuild);
+    }
 }
 
 function createNewBase(pos, parentBase, moduleType) {
@@ -325,6 +374,15 @@ function createNewBase(pos, parentBase, moduleType) {
         lineMesh: lineMesh
     };
     
+    if (moduleType === 'dome') {
+        baseObj.shieldHits = 0;
+        baseObj.isDisabled = false;
+    }
+
+    if (moduleType === 'aao') {
+        baseObj.isActive = true;
+    }
+
     bases.push(baseObj);
 
     if (moduleType === 'generator') {
@@ -333,7 +391,7 @@ function createNewBase(pos, parentBase, moduleType) {
     }
     
     if (moduleType === 'dome') {
-        const domeGeo = new THREE.SphereGeometry(0.35, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2);
+        const domeGeo = new THREE.SphereGeometry(DOME_RADIUS, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2);
         const domeMat = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
         const domeMesh = new THREE.Mesh(domeGeo, domeMat);
         domeMesh.position.copy(pos);
@@ -385,9 +443,11 @@ function explode(pos, damage) {
         }
     }, 30);
 
+    if (damage === 0) return; 
+
     const basesCopy = [...bases];
     for (let b of basesCopy) {
-        if (b.position.distanceTo(explosionCenter) < 0.8) {
+        if (b.position.distanceTo(explosionCenter) < 0.4) { 
             b.hp -= damage;
             alert(`Попадание! Урон: ${damage}. Осталось HP: ${b.hp}`);
             if (b.hp <= 0) {
