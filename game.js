@@ -25,7 +25,7 @@ const playerColors = [0x00aaff, 0xff0000, 0x00ff00, 0xffff00, 0xff00ff, 0x00ffff
 
 const DOME_RADIUS = 0.35; 
 const AAO_RADIUS = 0.35; 
-const ANGLE_STEP = 22.5; // 360 / 16 = 22.5
+const ANGLE_STEP = 22.5; 
 
 function getGeometry(type) {
     if (type === 'aao') {
@@ -96,7 +96,6 @@ function setupUI() {
         endTurn();
     });
 
-    // ИЗМЕНЕНО: Шаг поворота теперь 22.5 градуса
     btnLeft.addEventListener('click', () => { if (selectedBase && !isAITurn) { currentAngle += ANGLE_STEP; updateArrowDirection(); } });
     btnRight.addEventListener('click', () => { if (selectedBase && !isAITurn) { currentAngle -= ANGLE_STEP; updateArrowDirection(); } });
 
@@ -131,14 +130,41 @@ function setupUI() {
             
             const cost = getModuleCost(selectedModuleType);
             if (power > 0 && playerEnergy[currentPlayer] >= cost) {
+                
+                // ПРОВЕРКА ДО СПИСАНИЯ ЭНЕРГИИ
+                const check = canShoot(selectedBase, currentAngle, selectedModuleType);
+                if (!check.allowed) {
+                    alert(check.reason);
+                    return; // Выходим, энергия не списывается
+                }
+
                 playerEnergy[currentPlayer] -= cost;
                 updateUI();
-                executeShot(selectedBase, currentAngle, power, selectedModuleType, () => {});
+                
+                // Передаем вычисленный угол и сектор в функцию выстрела
+                executeShot(selectedBase, check.snappedAngle, power, selectedModuleType, check.sector, () => {});
             } else if (power > 0) {
                 alert("Не хватает энергии!");
             }
         }
     });
+}
+
+// НОВАЯ ФУНКЦИЯ ПРОВЕРКИ
+function canShoot(startBase, angle, moduleToBuild) {
+    const snappedAngle = Math.round(angle / ANGLE_STEP) * ANGLE_STEP;
+    let sector = Math.round(snappedAngle / ANGLE_STEP) % 16;
+    if (sector < 0) sector += 16; 
+
+    const isBuildingModule = ['relay', 'dome', 'generator', 'aao'].includes(moduleToBuild);
+    
+    if (isBuildingModule) {
+        const existingBuild = bases.find(b => b.parent === startBase && b.sector === sector);
+        if (existingBuild) {
+            return { allowed: false, reason: "В этом направлении уже построен модуль! Выберите другое." };
+        }
+    }
+    return { allowed: true, snappedAngle: snappedAngle, sector: sector };
 }
 
 function spinEnergy() {
@@ -218,20 +244,36 @@ function playAITurn() {
             let cost = getModuleCost(module);
             
             if (playerEnergy[currentPlayer] >= cost) {
-                playerEnergy[currentPlayer] -= cost;
-                updateUI();
                 
-                let randomAngle = Math.floor(Math.random() * 16) * ANGLE_STEP; // ИИ тоже выбирает из 16 секторов
-                let randomPower = Math.random() * 8 + 2; 
+                // ИИ пробует найти свободный угол (до 10 попыток)
+                let randomAngle;
+                let check;
+                let allowed = false;
                 
-                camera.position.copy(startBase.position.clone().normalize().multiplyScalar(PLANET_RADIUS + 10));
-                controls.target.copy(startBase.position);
-                controls.update();
-                
-                executeShot(startBase, randomAngle, randomPower, module, () => {
-                    setTimeout(endTurn, 1000); 
-                });
-                return;
+                for (let i = 0; i < 10; i++) {
+                    randomAngle = Math.floor(Math.random() * 16) * ANGLE_STEP;
+                    check = canShoot(startBase, randomAngle, module);
+                    if (check.allowed) {
+                        allowed = true;
+                        break;
+                    }
+                }
+
+                if (allowed) {
+                    playerEnergy[currentPlayer] -= cost;
+                    updateUI();
+                    
+                    let randomPower = Math.random() * 8 + 2; 
+                    
+                    camera.position.copy(startBase.position.clone().normalize().multiplyScalar(PLANET_RADIUS + 10));
+                    controls.target.copy(startBase.position);
+                    controls.update();
+                    
+                    executeShot(startBase, check.snappedAngle, randomPower, module, check.sector, () => {
+                        setTimeout(endTurn, 1000); 
+                    });
+                    return;
+                }
             }
         }
         setTimeout(endTurn, 1000);
@@ -274,7 +316,6 @@ function startGame() {
         layFlatOnSphere(hub, pos);
         scene.add(hub);
         
-        // У хаба нет родителя и нет сектора
         let baseObj = { mesh: hub, position: pos, owner: p, hp: 100, maxHp: 100, type: 'hub', parent: null, sector: -1, lineMesh: null };
         
         if (p === 1) {
@@ -372,30 +413,13 @@ function updateArrowDirection() {
     arrowHelper.setDirection(currentDirection);
 }
 
-function executeShot(startBase, angle, powerValue, moduleToBuild, onComplete) {
-    // Привязываем угол к сетке (16 направлений)
-    const snappedAngle = Math.round(angle / ANGLE_STEP) * ANGLE_STEP;
-    
-    // Вычисляем номер сектора (от 0 до 15)
-    let sector = Math.round(snappedAngle / ANGLE_STEP) % 16;
-    if (sector < 0) sector += 16; 
-
-    // ПРОВЕРКА: Если это строительный модуль, проверяем, нет ли уже постройки в этом секторе
-    const isBuildingModule = ['relay', 'dome', 'generator', 'aao'].includes(moduleToBuild);
-    
-    if (isBuildingModule) {
-        const existingBuild = bases.find(b => b.parent === startBase && b.sector === sector);
-        if (existingBuild) {
-            alert("В этом направлении уже построен модуль! Выберите другое.");
-            return; // Отменяем выстрел
-        }
-    }
-
+// ИЗМЕНЕНО: Принимает точный угол и сектор
+function executeShot(startBase, angle, powerValue, moduleToBuild, sector, onComplete) {
     const normal = startBase.position.clone().normalize();
     let baseVector = new THREE.Vector3(1, 0, 0);
     if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
     let tangent = baseVector.cross(normal).normalize();
-    tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(snappedAngle));
+    tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(angle));
     
     const distance = powerValue * 0.15;
     const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(distance)).normalize().multiplyScalar(PLANET_RADIUS);
@@ -440,7 +464,7 @@ function executeShot(startBase, angle, powerValue, moduleToBuild, onComplete) {
             requestAnimationFrame(animateFlight);
         } else {
             scene.remove(projectile);
-            handleLanding(targetPos, startBase, moduleToBuild, sector); // Передаем сектор
+            handleLanding(targetPos, startBase, moduleToBuild, sector); 
             if (onComplete) onComplete();
         }
     }
@@ -481,7 +505,7 @@ function handleLanding(targetPos, parentBase, moduleToBuild, sector) {
     }
 
     if (!collision) {
-        createNewBase(targetPos, parentBase, moduleToBuild, sector); // Передаем сектор
+        createNewBase(targetPos, parentBase, moduleToBuild, sector); 
     }
 }
 
@@ -507,7 +531,7 @@ function createNewBase(pos, parentBase, moduleType, sector) {
         maxHp: 100, 
         type: moduleType, 
         parent: parentBase, 
-        sector: sector, // Сохраняем сектор
+        sector: sector, 
         lineMesh: lineMesh
     };
     
@@ -598,10 +622,7 @@ function createEnergyLine(startPos, endPos, owner) {
     const midPoint = startPos.clone().lerp(endPos, 0.5);
     const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + 0.3);
     const curve = new THREE.QuadraticBezierCurve3(startPos, controlPoint, endPos);
-    
-    // ТОНКИЕ ЛИНИИ: уменьшили радиус трубы с 0.02 до 0.008
     const tubeGeometry = new THREE.TubeGeometry(curve, 20, 0.008, 8, false);
-    
     const color = playerColors[owner - 1];
     const tubeMaterial = new THREE.MeshBasicMaterial({ color: color });
     const tube = new THREE.Mesh(tubeGeometry, tubeMaterial);
