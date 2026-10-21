@@ -8,12 +8,13 @@ camera.position.z = 20;
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setClearColor(0x1a1a2e, 1);
+renderer.setClearColor(0x000000, 1); // Сделали космос черным
 document.body.appendChild(renderer.domElement);
 
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); 
+// УМЕНЬШИЛИ ЯРКОСТЬ СВЕТА
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.25); 
 scene.add(ambientLight);
-const dirLight = new THREE.DirectionalLight(0xffffff, 1); 
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.5); 
 dirLight.position.set(5, 3, 5);
 scene.add(dirLight);
 
