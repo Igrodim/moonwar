@@ -37,7 +37,7 @@ export function initGame(_scene, _camera, _controls) {
     setupEventListeners();
 }
 
-// ПЛАВНОЕ ИЗМЕНЕНИЕ УГЛА (Математика)
+// ПЛАВНОЕ ИЗМЕНЕНИЕ УГЛА
 export function updateCameraTilt() {
     if (!selectedBase || isAITurn) return;
     
@@ -45,43 +45,50 @@ export function updateCameraTilt() {
     const normal = target.clone().normalize();
     const dist = camera.position.distanceTo(target);
     
-    const minDist = 1.5;  // Ближняя дистанция (наклон 25 градусов от нормали = 65 к поверхности)
-    const maxDist = 20;   // Дальняя дистанция (почти 90 к поверхности)
+    const minDist = 1.5;  
+    const maxDist = 20;   
     
     let t = (dist - minDist) / (maxDist - minDist);
     t = Math.max(0, Math.min(1, t));
     
-    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t)); // От 2 до 25 градусов от нормали
+    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t)); 
     
     const offset = camera.position.clone().sub(target);
     const currentPhi = offset.angleTo(normal);
     
-    // Если угол не совпадает, плавно поворачиваем камеру
     if (Math.abs(currentPhi - targetPhi) > 0.005) {
-        // Ось вращения - перпендикуляр между текущим положением и нормалью
         const axis = new THREE.Vector3().crossVectors(offset, normal).normalize();
         if (axis.lengthSq() > 0.001) {
-            // Плавно интерполируем позицию
             offset.applyAxisAngle(axis, (currentPhi - targetPhi) * 0.1);
             camera.position.copy(target).add(offset);
         }
     }
 }
 
-// ИНИЦИАЛИЗАЦИЯ КАМЕРЫ ПРИ ВЫБОРЕ БАЗЫ
+// ИНИЦИАЛИЗАЦИЯ КАМЕРЫ (ИСПРАВЛЕНО: сохраняет текущую дистанцию)
 function centerCameraOnBase(base) {
     const normal = base.position.clone().normalize();
-    camera.up.copy(normal); // Верх камеры смотрит от центра планеты
     
-    // Задаем начальный наклон 2 градуса (вид почти сверху)
+    // Сохраняем текущую дистанцию, чтобы камера не отлетала
+    let currentDist = camera.position.distanceTo(controls.target);
+    if (currentDist < 1.5 || currentDist > 25 || isNaN(currentDist)) {
+        currentDist = 20; // Дефолтная дистанция только при старте игры
+    }
+
+    camera.up.copy(normal); 
+    
     let tangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
     if (tangent.lengthSq() < 0.1) tangent.set(0, 0, 1).cross(normal).normalize();
     
-    const initialPhi = THREE.MathUtils.degToRad(2);
-    const dist = 20;
-    
-    const offset = normal.clone().multiplyScalar(Math.cos(initialPhi) * dist)
-                         .add(tangent.clone().multiplyScalar(Math.sin(initialPhi) * dist));
+    // Рассчитываем угол для текущей дистанции (чтобы не было рывка наклона)
+    const minDist = 1.5;
+    const maxDist = 20;
+    let t = (currentDist - minDist) / (maxDist - minDist);
+    t = Math.max(0, Math.min(1, t));
+    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t));
+
+    const offset = normal.clone().multiplyScalar(Math.cos(targetPhi) * currentDist)
+                         .add(tangent.clone().multiplyScalar(Math.sin(targetPhi) * currentDist));
                          
     camera.position.copy(base.position).add(offset);
     controls.target.copy(base.position);
@@ -283,19 +290,16 @@ function setupEventListeners() {
     });
 }
 
-// ЧИСТАЯ МАТЕМАТИКА ДЛЯ ВРАЩЕНИЯ
 function rotateCameraAroundTarget(angle) {
     if (!selectedBase) return;
     
     const target = selectedBase.position;
     const normal = target.clone().normalize();
 
-    // Вращаем позицию камеры вокруг нормали базы
     const offset = camera.position.clone().sub(target);
     offset.applyAxisAngle(normal, angle);
     camera.position.copy(target).add(offset);
 
-    // Вращаем "верх" камеры, чтобы горизонт оставался ровным
     camera.up.applyAxisAngle(normal, angle);
     
     controls.update();
