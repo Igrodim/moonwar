@@ -4,7 +4,7 @@ import { initGame, updateCameraTilt } from './game.js';
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
 camera.position.z = 20;
-camera.up.set(0, 1, 0); // Жестко фиксируем верх, чтобы никогда не переворачивалось
+camera.up.set(0, 1, 0); // ЖЕСТКО ФИКСИРУЕМ ВЕРХ
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); 
@@ -21,7 +21,7 @@ scene.add(dirLight);
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
-controls.enablePan = false; // Полёт на ПКМ реализован в game.js
+controls.enablePan = false; 
 controls.enableRotate = false; 
 controls.zoomSpeed = 1.2;
 controls.minDistance = 1.5; 
