@@ -26,13 +26,12 @@ let isShooting = false;
 let currentCameraAzimuth = 0; 
 let fogMat;
 
-let isRotatingLeft = false;
+// ФЛАГИ ДЛЯ ПЛАВНОГО ВРАЩЕНИЯ
+let isRotatingLeft = false;  // Для камеры (A/D)
 let isRotatingRight = false;
+let isTurningLeft = false;   // Для стрелки (◀ ▶)
+let isTurningRight = false;
 const ROTATION_SPEED = 0.02;
-
-let isTransitioning = false;
-let targetCameraPos = new THREE.Vector3();
-let targetLookAt = new THREE.Vector3();
 
 let isPanning = false;
 let panMouse = { x: 0, y: 0 };
@@ -53,24 +52,19 @@ export function initGame(_scene, _camera, _controls) {
 }
 
 export function updateCameraTilt() {
-    // 1. ПЛАВНЫЙ ПЕРЕЛЕТ (OrbitControls временно отключен)
-    if (isTransitioning) {
-        controls.enabled = false;
-        camera.position.lerp(targetCameraPos, 0.1);
-        controls.target.lerp(targetLookAt, 0.1);
-        camera.lookAt(controls.target);
-        if (camera.position.distanceTo(targetCameraPos) < 0.1) {
-            isTransitioning = false;
-            controls.enabled = true;
+    // 1. ПЛАВНОЕ ВРАЩЕНИЕ СТРЕЛКИ (КНОПКИ ◀ ▶)
+    if (isTurningLeft || isTurningRight) {
+        if (selectedBase && !isAITurn && !isShooting && !isPanning) {
+            const step = isTurningLeft ? 2 : -2; // Скорость поворота стрелки
+            currentAngle += step;
+            selectedBase.aimAngle = currentAngle;
+            updateArrowDirection();
         }
-        return;
     }
-
-    controls.enabled = true;
 
     if (!selectedBase || isAITurn || isShooting || isPanning) return;
 
-    // 2. ПЛАВНОЕ ВРАЩЕНИЕ КАМЕРЫ (A/D)
+    // 2. ПЛАВНОЕ ВРАЩЕНИЕ КАМЕРЫ (КЛАВИШИ A/D)
     if (isRotatingLeft || isRotatingRight) {
         const target = selectedBase.position;
         const normal = target.clone().normalize();
@@ -82,10 +76,10 @@ export function updateCameraTilt() {
         offset.applyAxisAngle(normal, step);
         camera.position.copy(target).add(offset);
         
-        camera.up.copy(normal); // Держим горизонт ровно
+        camera.up.copy(normal); 
     }
 
-    // 3. ПЛАВНЫЙ НАКЛОН ПРИ ЗУМЕ
+    // 3. НАКЛОН ПРИ ЗУМЕ
     const target = controls.target; 
     const normal = target.clone().normalize();
     const dist = camera.position.distanceTo(target);
@@ -110,7 +104,7 @@ export function updateCameraTilt() {
     }
 }
 
-function centerCameraOnBase(base, instant = false) {
+function centerCameraOnBase(base) {
     const normal = base.position.clone().normalize();
     let currentDist = camera.position.distanceTo(controls.target);
     if (currentDist < 1.5 || currentDist > 25 || isNaN(currentDist)) {
@@ -130,18 +124,10 @@ function centerCameraOnBase(base, instant = false) {
     const offset = normal.clone().multiplyScalar(Math.cos(targetPhi) * currentDist)
                          .add(tangent.clone().multiplyScalar(Math.sin(targetPhi) * currentDist));
                          
-    targetCameraPos.copy(base.position).add(offset);
-    targetLookAt.copy(base.position);
-
-    if (instant) {
-        camera.position.copy(targetCameraPos);
-        controls.target.copy(targetLookAt);
-        camera.up.copy(normal); // Фикс Raycaster на старте
-        controls.update();
-        isTransitioning = false;
-    } else {
-        isTransitioning = true;
-    }
+    camera.position.copy(base.position).add(offset);
+    controls.target.copy(base.position);
+    camera.up.copy(normal); 
+    controls.update();
 }
 
 function setupFogOfWar() {
@@ -207,11 +193,13 @@ export function updateFogOfWar() {
 }
 
 function setupEventListeners() {
+    // ПОЛЕТ НА ПКМ
     window.addEventListener('pointerdown', (e) => {
-        if (e.button === 2 && !isAITurn && !gameOver && !isShooting && !isTransitioning) {
+        if (e.button === 2 && !isAITurn && !gameOver) {
             isPanning = true;
             panMouse.x = e.clientX;
             panMouse.y = e.clientY;
+            controls.enableDamping = false; 
         }
     });
 
@@ -231,7 +219,7 @@ function setupEventListeners() {
             let tangentY = new THREE.Vector3().crossVectors(normal, tangentX).normalize();
             
             const dist = camera.position.distanceTo(target);
-            const speed = dist * 0.0005;
+            const speed = dist * 0.001;
             
             const moveVec = tangentX.multiplyScalar(-dx * speed).add(tangentY.multiplyScalar(dy * speed));
             
@@ -249,11 +237,13 @@ function setupEventListeners() {
     window.addEventListener('pointerup', (e) => {
         if (e.button === 2) {
             isPanning = false;
+            controls.enableDamping = true; 
         }
     });
 
+    // КЛАВИАТУРА A/D (ВРАЩЕНИЕ КАМЕРЫ)
     window.addEventListener('keydown', (e) => {
-        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning || isTransitioning) return;
+        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning) return;
         if (e.repeat) return;
         const key = e.key.toLowerCase();
         if (key === 'a' || key === 'ф') isRotatingLeft = true; 
@@ -266,25 +256,43 @@ function setupEventListeners() {
         if (key === 'd' || key === 'в') isRotatingRight = false;
     });
 
+    // КНОПКИ A/D НА ЭКРАНЕ (ВРАЩЕНИЕ КАМЕРЫ)
     uiElements.rotateLeft.addEventListener('pointerdown', () => {
-        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning || isTransitioning) return;
+        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning) return;
         isRotatingLeft = true;
     });
     uiElements.rotateLeft.addEventListener('pointerup', () => isRotatingLeft = false);
     uiElements.rotateLeft.addEventListener('pointerleave', () => isRotatingLeft = false);
 
     uiElements.rotateRight.addEventListener('pointerdown', () => {
-        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning || isTransitioning) return;
+        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning) return;
         isRotatingRight = true;
     });
     uiElements.rotateRight.addEventListener('pointerup', () => isRotatingRight = false);
     uiElements.rotateRight.addEventListener('pointerleave', () => isRotatingRight = false);
 
+    // КНОПКИ ◀ ▶ (ВРАЩЕНИЕ СТРЕЛКИ)
+    uiElements.btnLeft.addEventListener('pointerdown', () => {
+        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning) return;
+        isTurningLeft = true;
+    });
+    uiElements.btnLeft.addEventListener('pointerup', () => isTurningLeft = false);
+    uiElements.btnLeft.addEventListener('pointerleave', () => isTurningLeft = false);
+
+    uiElements.btnRight.addEventListener('pointerdown', () => {
+        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning) return;
+        isTurningRight = true;
+    });
+    uiElements.btnRight.addEventListener('pointerup', () => isTurningRight = false);
+    uiElements.btnRight.addEventListener('pointerleave', () => isTurningRight = false);
+
+    // ЭНЕРГИЯ
     uiElements.spinBtn.addEventListener('click', () => {
         if (hasSpunThisTurn || gameOver || isAITurn || isShooting) return;
         spinEnergy();
     });
 
+    // ВЫБОР МОДУЛЕЙ
     uiElements.moduleBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             if (isAITurn || isShooting) return;
@@ -298,14 +306,16 @@ function setupEventListeners() {
         });
     });
 
+    // КОНЕЦ ХОДА
     uiElements.endTurnBtn.addEventListener('click', () => {
         if (gameOver || isAITurn || isShooting) return;
         endTurn();
     });
 
+    // ВЫСТРЕЛ
     uiElements.fireBtn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
-        if (!selectedBase || gameOver || isAITurn || isShooting || isTransitioning) return;
+        if (!selectedBase || gameOver || isAITurn || isShooting) return;
         
         if (!selectedModuleType) { alert("Сначала выберите модуль внизу!"); return; }
 
@@ -330,9 +340,10 @@ function setupEventListeners() {
             uiElements.powerBar.style.width = '0%';
             
             if (isShooting) return; 
+            if (power <= 0) power = 1; 
 
             const cost = getModuleCost(selectedModuleType);
-            if (power > 0 && playerEnergy[currentPlayer] >= cost) {
+            if (playerEnergy[currentPlayer] >= cost) {
                 
                 const check = canShoot(bases, selectedBase, currentAngle, selectedModuleType);
                 if (!check.allowed) {
@@ -365,7 +376,7 @@ function setupEventListeners() {
                     1, 
                     VISION_RADIUS
                 );
-            } else if (power > 0) {
+            } else if (playerEnergy[currentPlayer] < cost) {
                 alert("Не хватает энергии!");
             }
         }
@@ -405,6 +416,11 @@ function endTurn() {
     if (gameOver) return;
     
     isShooting = false; 
+    isRotatingLeft = false;
+    isRotatingRight = false;
+    isTurningLeft = false;
+    isTurningRight = false;
+    
     uiElements.fireBtn.disabled = false;
     uiElements.fireBtn.innerText = "ЗАЖМИ ДЛЯ ВЫСТРЕЛА";
     
@@ -489,7 +505,7 @@ function startGame() {
         
         if (p === 1) {
             selectedBase = baseObj;
-            centerCameraOnBase(selectedBase, true); 
+            centerCameraOnBase(selectedBase); 
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(pos);
             currentAngle = selectedBase.aimAngle;
@@ -512,11 +528,11 @@ function setupRaycaster() {
         
         isPanning = false; 
         
-        if (isAITurn || gameOver || isShooting || isTransitioning) return;
+        if (isAITurn || gameOver || isShooting) return;
         if (event.target.closest('#bottom-panel') || event.target.closest('#ui-panel') || event.target.closest('#start-screen')) return;
 
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-        mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        mouse.y = (event.clientY / window.innerHeight) * 2 + 1;
 
         camera.updateMatrixWorld();
         raycaster.setFromCamera(mouse, camera);
@@ -543,7 +559,7 @@ function setupRaycaster() {
             if (clickedBase.type !== 'hub' && clickedBase.type !== 'relay') { alert("С этого модуля нельзя стрелять!"); return; }
 
             selectedBase = clickedBase;
-            centerCameraOnBase(selectedBase, false); 
+            centerCameraOnBase(selectedBase); 
             
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(selectedBase.position);
