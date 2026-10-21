@@ -21,8 +21,6 @@ let hasSpunThisTurn = false;
 let selectedModuleType = null; 
 let gameOver = false;
 let isAITurn = false;
-
-// БЛОКИРОВКА ВО ВРЕМЯ ПОЛЕТА
 let isShooting = false; 
 
 let currentCameraAzimuth = 0; 
@@ -32,6 +30,9 @@ export function initGame(_scene, _camera, _controls) {
     scene = _scene;
     camera = _camera;
     controls = _controls;
+
+    // Отключаем контекстное меню браузера при клике ПКМ
+    window.addEventListener('contextmenu', e => e.preventDefault());
 
     arrowHelper = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), 0.6, 0xffff00, 0.15, 0.1);
     arrowHelper.visible = false;
@@ -44,7 +45,8 @@ export function initGame(_scene, _camera, _controls) {
 export function updateCameraTilt() {
     if (!selectedBase || isAITurn || isShooting) return;
     
-    const target = selectedBase.position;
+    // ТЕПЕРЬ ИСПОЛЬЗУЕМ controls.target, ЧТОБЫ КАМЕРА МОГЛА СВОБОДНО ЛЕТАТЬ
+    const target = controls.target; 
     const normal = target.clone().normalize();
     const dist = camera.position.distanceTo(target);
     
@@ -66,6 +68,9 @@ export function updateCameraTilt() {
             camera.position.copy(target).add(offset);
         }
     }
+    
+    // Плавно выравниваем верх камеры по нормали планеты (чтобы горизонт не кренился)
+    camera.up.lerp(normal, 0.1).normalize();
 }
 
 function centerCameraOnBase(base) {
@@ -202,7 +207,6 @@ function setupEventListeners() {
 
     uiElements.fireBtn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
-        // ДВОЙНАЯ ПРОВЕРКА
         if (!selectedBase || gameOver || isAITurn || isShooting) return;
         
         if (!selectedModuleType) { alert("Сначала выберите модуль внизу!"); return; }
@@ -227,7 +231,6 @@ function setupEventListeners() {
             clearInterval(powerInterval);
             uiElements.powerBar.style.width = '0%';
             
-            // ЕСЛИ МЫ УЖЕ СТРЕЛЯЕМ, ИГНОРИРУЕМ
             if (isShooting) return; 
 
             const cost = getModuleCost(selectedModuleType);
@@ -239,7 +242,6 @@ function setupEventListeners() {
                     return; 
                 }
 
-                // СТАВИМ БЛОКИРОВКУ И ОТКЛЮЧАЕМ КНОПКУ
                 isShooting = true; 
                 uiElements.fireBtn.disabled = true;
                 uiElements.fireBtn.innerText = "ПОЛЕТ...";
@@ -252,7 +254,6 @@ function setupEventListeners() {
                     (genCount) => alert(`Генератор! Твоя выработка: от ${5 + genCount} до ${8 + genCount}`),
                     (owner) => endGame(owner),
                     () => {
-                        // СНИМАЕМ БЛОКИРОВКУ И ВКЛЮЧАЕМ КНОПКУ ОБРАТНО
                         isShooting = false; 
                         uiElements.fireBtn.disabled = false;
                         uiElements.fireBtn.innerText = "ЗАЖМИ ДЛЯ ВЫСТРЕЛА";
@@ -281,9 +282,17 @@ function rotateCameraAroundTarget(angle) {
     currentCameraAzimuth += angle; 
     const target = selectedBase.position;
     const normal = target.clone().normalize();
+    
+    // Вращаем камеру вокруг выбранной базы (а не центра экрана)
     const offset = camera.position.clone().sub(target);
     offset.applyAxisAngle(normal, angle);
     camera.position.copy(target).add(offset);
+    
+    // Также вращаем цель камеры, чтобы она оставалась на базе
+    if (controls.target.distanceTo(target) < 1.5) {
+        controls.target.copy(target); 
+    }
+    
     camera.up.applyAxisAngle(normal, angle);
     controls.update();
 }
@@ -416,6 +425,8 @@ function setupRaycaster() {
     const mouse = new THREE.Vector2();
 
     window.addEventListener('pointerdown', (event) => {
+        // РЕАГИРУЕМ ТОЛЬКО НА ЛЕВУЮ КНОПКУ МЫШИ
+        if (event.button !== 0) return;
         if (isAITurn || gameOver || isShooting) return;
         if (event.target.closest('#bottom-panel') || event.target.closest('#ui-panel') || event.target.closest('#start-screen')) return;
 
