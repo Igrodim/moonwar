@@ -26,12 +26,19 @@ let isShooting = false;
 let currentCameraAzimuth = 0; 
 let fogMat;
 
-// ФЛАГИ ДЛЯ ПЛАВНОГО ВРАЩЕНИЯ
+// ДЛЯ ПЛАВНОГО ВРАЩЕНИЯ
 let isRotatingLeft = false;
 let isRotatingRight = false;
-const ROTATION_SPEED = 0.02; // Скорость поворота за кадр
+const ROTATION_SPEED = 0.02;
 
-let camAnim = { active: false, t: 0, startPos: new THREE.Vector3(), endPos: new THREE.Vector3(), startTarget: new THREE.Vector3(), endTarget: new THREE.Vector3(), startUp: new THREE.Vector3(), endUp: new THREE.Vector3() };
+// ДЛЯ ПЛАВНОГО ПЕРЕЛЕТА
+let isTransitioning = false;
+let targetCameraPos = new THREE.Vector3();
+let targetLookAt = new THREE.Vector3();
+
+// ДЛЯ ПОЛЕТА СПУТНИКА (ПКМ)
+let isPanning = false;
+let panMouse = { x: 0, y: 0 };
 
 export function initGame(_scene, _camera, _controls) {
     scene = _scene;
@@ -49,21 +56,19 @@ export function initGame(_scene, _camera, _controls) {
 }
 
 export function updateCameraTilt() {
-    // 1. АНИМАЦИЯ ПЕРЕЛЕТА (если выбрана новая база)
-    if (camAnim.active) {
-        camAnim.t += 0.04; 
-        if (camAnim.t >= 1) { camAnim.t = 1; camAnim.active = false; }
-        
-        let p = camAnim.t < 0.5 ? 2 * camAnim.t * camAnim.t : 1 - Math.pow(-2 * camAnim.t + 2, 2) / 2;
-        
-        camera.position.lerpVectors(camAnim.startPos, camAnim.endPos, p);
-        controls.target.lerpVectors(camAnim.startTarget, camAnim.endTarget, p);
-        camera.up.lerpVectors(camAnim.startUp, camAnim.endUp, p).normalize();
+    // 1. ПЛАВНЫЙ ПЕРЕЛЕТ К БАЗЕ
+    if (isTransitioning) {
+        camera.position.lerp(targetCameraPos, 0.1);
+        controls.target.lerp(targetLookAt, 0.1);
+        camera.up.lerp(targetLookAt.clone().normalize(), 0.1).normalize();
         controls.update();
+        if (camera.position.distanceTo(targetCameraPos) < 0.1) {
+            isTransitioning = false;
+        }
         return;
     }
 
-    if (!selectedBase || isAITurn || isShooting) return;
+    if (!selectedBase || isAITurn || isShooting || isPanning) return;
 
     // 2. ПЛАВНОЕ ВРАЩЕНИЕ A/D
     if (isRotatingLeft || isRotatingRight) {
@@ -127,16 +132,9 @@ function centerCameraOnBase(base) {
     const offset = normal.clone().multiplyScalar(Math.cos(targetPhi) * currentDist)
                          .add(tangent.clone().multiplyScalar(Math.sin(targetPhi) * currentDist));
                          
-    const newPos = base.position.clone().add(offset);
-    
-    camAnim.startPos.copy(camera.position);
-    camAnim.endPos.copy(newPos);
-    camAnim.startTarget.copy(controls.target);
-    camAnim.endTarget.copy(base.position);
-    camAnim.startUp.copy(camera.up);
-    camAnim.endUp.copy(normal);
-    camAnim.t = 0;
-    camAnim.active = true;
+    targetCameraPos.copy(base.position).add(offset);
+    targetLookAt.copy(base.position);
+    isTransitioning = true;
 }
 
 function setupFogOfWar() {
@@ -202,9 +200,58 @@ export function updateFogOfWar() {
 }
 
 function setupEventListeners() {
-    // КЛАВИАТУРА (УСТАНАВЛИВАЕМ ФЛАГИ)
+    // УПРАВЛЕНИЕ СПУТНИКОМ (ПКМ)
+    window.addEventListener('pointerdown', (e) => {
+        if (e.button === 2 && !isAITurn && !gameOver && !isShooting) {
+            isPanning = true;
+            panMouse.x = e.clientX;
+            panMouse.y = e.clientY;
+        }
+    });
+
+    window.addEventListener('pointermove', (e) => {
+        if (isPanning) {
+            const dx = e.clientX - panMouse.x;
+            const dy = e.clientY - panMouse.y;
+            panMouse.x = e.clientX;
+            panMouse.y = e.clientY;
+
+            const target = controls.target;
+            const normal = target.clone().normalize();
+            
+            let up = new THREE.Vector3(0, 1, 0);
+            let tangentX = new THREE.Vector3().crossVectors(normal, up).normalize();
+            if (tangentX.lengthSq() < 0.01) tangentX.set(1, 0, 0).cross(normal).normalize();
+            let tangentY = new THREE.Vector3().crossVectors(normal, tangentX).normalize();
+            
+            const dist = camera.position.distanceTo(target);
+            const speed = dist * 0.0005;
+            
+            const moveVec = tangentX.multiplyScalar(-dx * speed).add(tangentY.multiplyScalar(dy * speed));
+            
+            camera.position.add(moveVec);
+            target.add(moveVec);
+            
+            // Возвращаем цель на поверхность планеты, чтобы мы не улетели в космос
+            target.setLength(10);
+            
+            // Камера держит ту же дистанцию от поверхности
+            const dirToCam = camera.position.clone().sub(target).normalize();
+            camera.position.copy(target).add(dirToCam.multiplyScalar(dist));
+            
+            controls.update();
+        }
+    });
+
+    window.addEventListener('pointerup', (e) => {
+        if (e.button === 2) {
+            isPanning = false;
+        }
+    });
+
+    // КЛАВИАТУРА A/D
     window.addEventListener('keydown', (e) => {
-        if (isAITurn || gameOver || !selectedBase || isShooting) return;
+        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning) return;
         if (e.repeat) return;
         const key = e.key.toLowerCase();
         if (key === 'a' || key === 'ф') isRotatingLeft = true; 
@@ -217,16 +264,16 @@ function setupEventListeners() {
         if (key === 'd' || key === 'в') isRotatingRight = false;
     });
 
-    // КНОПКИ UI (УСТАНАВЛИВАЕМ ФЛАГИ)
+    // КНОПКИ НА ЭКРАНЕ
     uiElements.rotateLeft.addEventListener('pointerdown', () => {
-        if (isAITurn || gameOver || !selectedBase || isShooting) return;
+        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning) return;
         isRotatingLeft = true;
     });
     uiElements.rotateLeft.addEventListener('pointerup', () => isRotatingLeft = false);
     uiElements.rotateLeft.addEventListener('pointerleave', () => isRotatingLeft = false);
 
     uiElements.rotateRight.addEventListener('pointerdown', () => {
-        if (isAITurn || gameOver || !selectedBase || isShooting) return;
+        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning) return;
         isRotatingRight = true;
     });
     uiElements.rotateRight.addEventListener('pointerup', () => isRotatingRight = false);
@@ -455,8 +502,9 @@ function setupRaycaster() {
     const mouse = new THREE.Vector2();
 
     window.addEventListener('pointerdown', (event) => {
+        // Клики только ЛКМ
         if (event.button !== 0) return; 
-        if (isAITurn || gameOver || isShooting || camAnim.active) return;
+        if (isAITurn || gameOver || isShooting || isPanning) return;
         if (event.target.closest('#bottom-panel') || event.target.closest('#ui-panel') || event.target.closest('#start-screen')) return;
 
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
