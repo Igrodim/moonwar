@@ -26,10 +26,9 @@ let isShooting = false;
 let currentCameraAzimuth = 0; 
 let fogMat;
 
-// ФЛАГИ ДЛЯ ПЛАВНОГО ВРАЩЕНИЯ
-let isRotatingLeft = false;  // Для камеры (A/D)
+let isRotatingLeft = false;
 let isRotatingRight = false;
-let isTurningLeft = false;   // Для стрелки (◀ ▶)
+let isTurningLeft = false;
 let isTurningRight = false;
 const ROTATION_SPEED = 0.02;
 
@@ -52,10 +51,10 @@ export function initGame(_scene, _camera, _controls) {
 }
 
 export function updateCameraTilt() {
-    // 1. ПЛАВНОЕ ВРАЩЕНИЕ СТРЕЛКИ (КНОПКИ ◀ ▶)
+    // 1. ВРАЩЕНИЕ СТРЕЛКИ (КНОПКИ ◀ ▶). Убрали проверку isPanning, чтобы всегда работало.
     if (isTurningLeft || isTurningRight) {
-        if (selectedBase && !isAITurn && !isShooting && !isPanning) {
-            const step = isTurningLeft ? 2 : -2; // Скорость поворота стрелки
+        if (selectedBase && !isAITurn && !isShooting) {
+            const step = isTurningLeft ? 2 : -2; 
             currentAngle += step;
             selectedBase.aimAngle = currentAngle;
             updateArrowDirection();
@@ -64,7 +63,7 @@ export function updateCameraTilt() {
 
     if (!selectedBase || isAITurn || isShooting || isPanning) return;
 
-    // 2. ПЛАВНОЕ ВРАЩЕНИЕ КАМЕРЫ (КЛАВИШИ A/D)
+    // 2. ВРАЩЕНИЕ КАМЕРЫ (КЛАВИШИ A/D)
     if (isRotatingLeft || isRotatingRight) {
         const target = selectedBase.position;
         const normal = target.clone().normalize();
@@ -193,7 +192,6 @@ export function updateFogOfWar() {
 }
 
 function setupEventListeners() {
-    // ПОЛЕТ НА ПКМ
     window.addEventListener('pointerdown', (e) => {
         if (e.button === 2 && !isAITurn && !gameOver) {
             isPanning = true;
@@ -234,16 +232,22 @@ function setupEventListeners() {
         }
     });
 
+    // СБРАСЫВАЕМ ВСЕ ФЛАГИ ПРИ ОТПУСКАНИИ ЛЮБОЙ КНОПКИ МЫШИ
     window.addEventListener('pointerup', (e) => {
         if (e.button === 2) {
             isPanning = false;
             controls.enableDamping = true; 
         }
+        if (e.button === 0) {
+            isRotatingLeft = false;
+            isRotatingRight = false;
+            isTurningLeft = false;
+            isTurningRight = false;
+        }
     });
 
-    // КЛАВИАТУРА A/D (ВРАЩЕНИЕ КАМЕРЫ)
     window.addEventListener('keydown', (e) => {
-        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning) return;
+        if (isAITurn || gameOver || !selectedBase || isShooting) return;
         if (e.repeat) return;
         const key = e.key.toLowerCase();
         if (key === 'a' || key === 'ф') isRotatingLeft = true; 
@@ -256,43 +260,41 @@ function setupEventListeners() {
         if (key === 'd' || key === 'в') isRotatingRight = false;
     });
 
-    // КНОПКИ A/D НА ЭКРАНЕ (ВРАЩЕНИЕ КАМЕРЫ)
+    // КНОПКИ A/D КАМЕРЫ
     uiElements.rotateLeft.addEventListener('pointerdown', () => {
-        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning) return;
+        if (isAITurn || gameOver || !selectedBase || isShooting) return;
         isRotatingLeft = true;
     });
     uiElements.rotateLeft.addEventListener('pointerup', () => isRotatingLeft = false);
     uiElements.rotateLeft.addEventListener('pointerleave', () => isRotatingLeft = false);
 
     uiElements.rotateRight.addEventListener('pointerdown', () => {
-        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning) return;
+        if (isAITurn || gameOver || !selectedBase || isShooting) return;
         isRotatingRight = true;
     });
     uiElements.rotateRight.addEventListener('pointerup', () => isRotatingRight = false);
     uiElements.rotateRight.addEventListener('pointerleave', () => isRotatingRight = false);
 
-    // КНОПКИ ◀ ▶ (ВРАЩЕНИЕ СТРЕЛКИ)
+    // КНОПКИ НАПРАВЛЕНИЯ СТРЕЛКИ ◀ ▶ (Убрали проверку isPanning)
     uiElements.btnLeft.addEventListener('pointerdown', () => {
-        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning) return;
+        if (isAITurn || gameOver || !selectedBase || isShooting) return;
         isTurningLeft = true;
     });
     uiElements.btnLeft.addEventListener('pointerup', () => isTurningLeft = false);
     uiElements.btnLeft.addEventListener('pointerleave', () => isTurningLeft = false);
 
     uiElements.btnRight.addEventListener('pointerdown', () => {
-        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning) return;
+        if (isAITurn || gameOver || !selectedBase || isShooting) return;
         isTurningRight = true;
     });
     uiElements.btnRight.addEventListener('pointerup', () => isTurningRight = false);
     uiElements.btnRight.addEventListener('pointerleave', () => isTurningRight = false);
 
-    // ЭНЕРГИЯ
     uiElements.spinBtn.addEventListener('click', () => {
         if (hasSpunThisTurn || gameOver || isAITurn || isShooting) return;
         spinEnergy();
     });
 
-    // ВЫБОР МОДУЛЕЙ
     uiElements.moduleBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             if (isAITurn || isShooting) return;
@@ -306,13 +308,11 @@ function setupEventListeners() {
         });
     });
 
-    // КОНЕЦ ХОДА
     uiElements.endTurnBtn.addEventListener('click', () => {
         if (gameOver || isAITurn || isShooting) return;
         endTurn();
     });
 
-    // ВЫСТРЕЛ
     uiElements.fireBtn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         if (!selectedBase || gameOver || isAITurn || isShooting) return;
