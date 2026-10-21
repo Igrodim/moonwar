@@ -333,7 +333,7 @@ function createNewBase(pos, parentBase, moduleType) {
     }
     
     if (moduleType === 'dome') {
-        const domeGeo = new THREE.SphereGeometry(1.5, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2);
+        const domeGeo = new THREE.SphereGeometry(0.15, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2);
         const domeMat = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
         const domeMesh = new THREE.Mesh(domeGeo, domeMat);
         domeMesh.position.copy(pos);
