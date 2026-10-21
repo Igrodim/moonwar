@@ -225,22 +225,13 @@ function setupEventListeners() {
 function rotateCameraAroundTarget(angle) {
     if (!selectedBase) return;
     const target = selectedBase.position;
-    
-    // Вектор от центра планеты к базе (нормаль поверхности)
     const normal = target.clone().normalize(); 
     
-    // Вектор от базы к камере
     const offset = camera.position.clone().sub(target);
-
-    // Вращаем камеру вокруг базы по касательной (вокруг нормали)
     offset.applyAxisAngle(normal, angle);
-
-    // Обновляем позицию камеры
     camera.position.copy(target).add(offset);
     
-    // Обновляем "верх" камеры, чтобы она не кувыркалась и смотрела на базу сверху
-    camera.up.copy(normal); 
-    
+    // Убрали camera.up.copy(normal), чтобы не ломать мышь
     controls.update();
 }
 
@@ -350,7 +341,6 @@ function startGame() {
         if (p === 1) {
             camera.position.copy(pos.clone().normalize().multiplyScalar(PLANET_RADIUS + 10));
             controls.target.copy(pos);
-            camera.up.copy(pos.clone().normalize()); // Ставим верх камеры правильно
             controls.update();
             selectedBase = baseObj;
             uiElements.uiPanel.style.display = 'block';
@@ -401,7 +391,6 @@ function setupRaycaster() {
 
             selectedBase = clickedBase;
             controls.target.copy(selectedBase.position);
-            camera.up.copy(selectedBase.position.clone().normalize()); // Обновляем верх камеры
             controls.update();
             
             uiElements.uiPanel.style.display = 'block';
