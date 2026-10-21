@@ -90,7 +90,6 @@ function setupUI() {
         e.preventDefault();
         if (!selectedBase || gameOver) return;
         
-        // СТРОГАЯ ПРОВЕРКА: выбран ли модуль
         if (!selectedModuleType) {
             alert("Сначала выберите модуль внизу!");
             return;
@@ -242,8 +241,8 @@ function shootBase() {
 
     let projectileColor = 0xffaa00;
     if (selectedModuleType === 'bomb') projectileColor = 0xff0000;
-    if (selectedModuleType === 'homing') projectileColor = 0xff00ff; // Фиолетовая ракета
-    if (selectedModuleType === 'drone') projectileColor = 0x00ffff; // Голубой дрон
+    if (selectedModuleType === 'homing') projectileColor = 0xff00ff; 
+    if (selectedModuleType === 'drone') projectileColor = 0x00ffff; 
 
     const projectile = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: projectileColor }));
     projectile.position.copy(selectedBase.position);
@@ -256,7 +255,7 @@ function shootBase() {
     const maxHeight = Math.min(travelDistance * 0.2, 0.4);
 
     const moduleToBuild = selectedModuleType; 
-    const parentBase = selectedBase; 
+    const parentBase = selectedBase; // Запоминаем базу, из которой стреляли
 
     function animateFlight() {
         const elapsed = performance.now() - startTime;
@@ -270,28 +269,19 @@ function shootBase() {
         } else {
             scene.remove(projectile);
             
-            // 1. БОМБА (25 УРОНА, НЕ СТРОИТСЯ)
-            if (moduleToBuild === 'bomb') {
-                explode(targetPos, 25); 
-                return;
-            }
+            // Бомбы и ракеты просто взрываются
+            if (moduleToBuild === 'bomb') { explode(targetPos, 25); return; }
+            if (moduleToBuild === 'homing') { explode(targetPos, 50); return; }
+            if (moduleToBuild === 'drone') { console.log("Дрон разведал территорию!"); return; }
 
-            // 2. САМОНАВОДЯЩАЯСЯ РАКЕТА (50 УРОНА, НЕ СТРОИТСЯ)
-            if (moduleToBuild === 'homing') {
-                explode(targetPos, 50); 
-                return;
-            }
-
-            // 3. ДРОН (ПРОСТО ИСЧЕЗАЕТ, ТУМАН ВОЙНЫ ПОЗЖЕ)
-            if (moduleToBuild === 'drone') {
-                console.log("Дрон разведал территорию!");
-                return;
-            }
-
-            // 4. СТРОИТЕЛЬНЫЕ МОДУЛИ (КОЛЛИЗИИ И ПОСТРОЙКА)
+            // Строительные модули (коллизии и постройка)
             let collision = false;
             for (let b of bases) {
-                if (b.position.distanceTo(targetPos) < 0.4) {
+                // ИГНОРИРУЕМ БАЗУ, ИЗ КОТОРОЙ СТРЕЛЯЛИ
+                if (b === parentBase) continue; 
+
+                // УМЕНЬШИЛИ РАДИУС КОЛЛИЗИИ (было 0.4, стало 0.15)
+                if (b.position.distanceTo(targetPos) < 0.15) {
                     collision = true;
                     explode(targetPos, 25);
                     b.hp -= 25; 
@@ -302,6 +292,8 @@ function shootBase() {
 
             if (!collision) {
                 createNewBase(targetPos, parentBase, moduleToBuild);
+            } else {
+                console.log("Коллизия! Модуль взорвался.");
             }
         }
     }
@@ -314,7 +306,7 @@ function createNewBase(pos, parentBase, moduleType) {
     
     if (moduleType === 'generator') newBaseColor = 0x00ff00; 
     if (moduleType === 'dome') newBaseColor = 0xffff00; 
-    if (moduleType === 'aao') newBaseColor = 0xff00ff; // ПВО - фиолетовый
+    if (moduleType === 'aao') newBaseColor = 0xff00ff; 
 
     const newBase = new THREE.Mesh(baseGeometry, new THREE.MeshBasicMaterial({ color: newBaseColor }));
     layFlatOnSphere(newBase, pos);
@@ -378,7 +370,6 @@ function explode(pos, damage) {
     const explosionMat = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 1 });
     const explosion = new THREE.Mesh(explosionGeo, explosionMat);
     
-    // Защита от изменения исходного вектора
     const explosionCenter = pos.clone().normalize().multiplyScalar(PLANET_RADIUS);
     explosion.position.copy(explosionCenter);
     scene.add(explosion);
