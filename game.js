@@ -37,6 +37,27 @@ export function initGame(_scene, _camera, _controls) {
     setupEventListeners();
 }
 
+// ФУНКЦИЯ КРАСИВОГО ПОЗИЦИОНИРОВАНИЯ КАМЕРЫ (45 ГРАДУСОВ)
+function centerCameraOnBase(base) {
+    const normal = base.position.clone().normalize();
+    // Создаем касательную, чтобы отлететь вбок
+    let tangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
+    if (tangent.length() < 0.1) tangent = new THREE.Vector3(0, 0, 1).cross(normal).normalize();
+    
+    // Угол наклона 45 градусов
+    const tilt = Math.PI / 4;
+    const offset = normal.clone().multiplyScalar(Math.cos(tilt)).add(tangent.multiplyScalar(Math.sin(tilt))).normalize();
+    
+    // Ставим камеру на расстоянии 4 единиц от базы
+    camera.position.copy(base.position).add(offset.multiplyScalar(4));
+    
+    // Выравниваем "верх" камеры по нормали планеты, чтобы горизонт был ровным
+    camera.up.copy(normal);
+    
+    controls.target.copy(base.position);
+    controls.update();
+}
+
 function setupFogOfWar() {
     const fogGeo = new THREE.SphereGeometry(PLANET_RADIUS + 0.5, 64, 64);
     
@@ -120,7 +141,6 @@ export function updateFogOfWar() {
 }
 
 function setupEventListeners() {
-    // Вращение с клавиатуры
     window.addEventListener('keydown', (e) => {
         if (isAITurn || gameOver || !selectedBase) return;
         const key = e.key.toLowerCase();
@@ -131,7 +151,6 @@ function setupEventListeners() {
         }
     });
 
-    // Вращение с новых кнопок UI
     uiElements.rotateLeft.addEventListener('click', () => {
         if (isAITurn || gameOver || !selectedBase) return;
         rotateCameraAroundTarget(-Math.PI / 18);
@@ -238,12 +257,10 @@ function rotateCameraAroundTarget(angle) {
     const target = selectedBase.position;
     const normal = target.clone().normalize(); 
     
-    // Вращаем позицию камеры
     const offset = camera.position.clone().sub(target);
     offset.applyAxisAngle(normal, angle);
     camera.position.copy(target).add(offset);
     
-    // Вращаем вектор "верха" камеры, чтобы горизонт не кренился
     camera.up.applyAxisAngle(normal, angle);
     
     controls.update();
@@ -353,11 +370,8 @@ function startGame() {
         bases.push(baseObj);
         
         if (p === 1) {
-            camera.position.copy(pos.clone().normalize().multiplyScalar(PLANET_RADIUS + 10));
-            controls.target.copy(pos);
-            camera.up.copy(pos.clone().normalize()); // Ставим верх ровно по нормали базы
-            controls.update();
             selectedBase = baseObj;
+            centerCameraOnBase(selectedBase); // ИСПОЛЬЗУЕМ НОВУЮ ФУНКЦИЮ
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(pos);
             currentAngle = 0;
@@ -405,9 +419,7 @@ function setupRaycaster() {
             if (clickedBase.type !== 'hub' && clickedBase.type !== 'relay') { alert("С этого модуля нельзя стрелять!"); return; }
 
             selectedBase = clickedBase;
-            controls.target.copy(selectedBase.position);
-            camera.up.copy(selectedBase.position.clone().normalize()); // Выравниваем камеру под новую базу
-            controls.update();
+            centerCameraOnBase(selectedBase); // ИСПОЛЬЗУЕМ НОВУЮ ФУНКЦИЮ
             
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(selectedBase.position);
