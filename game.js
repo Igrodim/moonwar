@@ -142,7 +142,7 @@ function spinEnergy() {
     
     uiElements.spinBtn.disabled = true;
     uiElements.spinBtn.innerText = `+${rolledEnergy}`;
-    setTimeout(() => { uiElements.spinBtn.innerText = '⚡'; }, 1000); // Возвращаем молнию
+    setTimeout(() => { uiElements.spinBtn.innerText = '⚡'; }, 1000); 
     
     updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
 }
@@ -172,7 +172,7 @@ function endTurn() {
     arrowHelper.visible = false;
     
     uiElements.spinBtn.disabled = false;
-    uiElements.spinBtn.innerText = '⚡'; // Молния при сбросе хода
+    uiElements.spinBtn.innerText = '⚡';
 
     updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
 
@@ -209,7 +209,6 @@ function endGame(owner) {
 
 function startGame() {
     let positions = [];
-    // Для 32 игроков уменьшаем минимальный угол между базами, иначе они не поместятся
     const minAngle = Math.PI / (totalPlayers * 1.2); 
 
     for (let p = 1; p <= totalPlayers; p++) {
