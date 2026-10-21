@@ -3,7 +3,6 @@ export const BASE_HEIGHT = 0.1;
 export const DOME_RADIUS = 0.35;
 export const AAO_RADIUS = 0.35; 
 
-// Генерируем 32 уникальных цвета по кругу (радуга)
 export const playerColors = [];
 for (let i = 0; i < 32; i++) {
     const color = new THREE.Color().setHSL(i / 32, 0.8, 0.6);
