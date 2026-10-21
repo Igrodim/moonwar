@@ -25,7 +25,7 @@ export function layFlatOnSphere(mesh, position) {
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
 }
 
-// ПЛАШКА ЗДОРОВЬЯ (УМЕНЬШЕНА В 10 РАЗ)
+// ПЛАШКА ЗДОРОВЬЯ (УВЕЛИЧЕНА В 3 РАЗА)
 export function createHealthBar(scene, base) {
     const canvas = document.createElement('canvas');
     canvas.width = 128;
@@ -36,12 +36,12 @@ export function createHealthBar(scene, base) {
     const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
     const sprite = new THREE.Sprite(mat);
     
-    // БЫЛО 0.8 на 0.2, СТАЛО 0.08 на 0.02
-    sprite.scale.set(0.08, 0.02, 1); 
+    // БЫЛО 0.08 на 0.02, СТАЛО 0.24 на 0.06
+    sprite.scale.set(0.24, 0.06, 1); 
     
     const normal = base.position.clone().normalize();
-    // Опустили ближе к базе (было 0.4)
-    sprite.position.copy(base.position).add(normal.clone().multiplyScalar(0.15));
+    // Немного подняли над базой
+    sprite.position.copy(base.position).add(normal.clone().multiplyScalar(0.2));
     
     base.healthSprite = sprite;
     base.healthCanvas = canvas;
@@ -49,7 +49,7 @@ export function createHealthBar(scene, base) {
     base.healthTex = tex;
     scene.add(sprite);
     
-    updateHealthBar(base); // Первичная отрисовка
+    updateHealthBar(base);
 }
 
 export function updateHealthBar(base) {
