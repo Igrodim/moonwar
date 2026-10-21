@@ -21,15 +21,14 @@ const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
 
+// ОТКЛЮЧАЕМ ВСЕ ВСТРОЕННЫЕ МЕХАНИЗМЫ УПРАВЛЕНИЯ, КРОМЕ ЗУМА
 controls.enablePan = false; 
-controls.enableRotate = true; // ВКЛЮЧАЕМ ВРАЩЕНИЕ
-controls.rotateSpeed = 0.5;
+controls.enableRotate = false; 
 
-// Настраиваем кнопки: ЛКМ ничего не делает (для выбора баз), ПКМ вращает
 controls.mouseButtons = {
     LEFT: null,
     MIDDLE: THREE.MOUSE.DOLLY,
-    RIGHT: THREE.MOUSE.ROTATE
+    RIGHT: null
 };
 
 controls.zoomSpeed = 1.2;
