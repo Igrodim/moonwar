@@ -1,4 +1,5 @@
 const PLANET_RADIUS = 10;
+const BASE_HEIGHT = 0.1; // Высота всех баз
 
 let scene, camera, controls;
 let bases = [];
@@ -9,10 +10,8 @@ let power = 0;
 let powerInterval = null;
 const maxPower = 10;
 let currentDirection = new THREE.Vector3(1, 0, 0);
-const baseGeometry = new THREE.CylinderGeometry(0.05, 0.05, 0.02, 16);
 let arrowHelper;
 
-// Игровые переменные
 let currentPlayer = 1;
 let totalPlayers = 2; 
 let playerEnergy = {}; 
@@ -22,11 +21,24 @@ let selectedModuleType = null;
 let gameOver = false;
 let isAITurn = false;
 
-// Цвета для 8 игроков
 const playerColors = [0x00aaff, 0xff0000, 0x00ff00, 0xffff00, 0xff00ff, 0x00ffff, 0xff8800, 0x8800ff];
 
 const DOME_RADIUS = 0.35; 
 const AAO_RADIUS = 0.35; 
+
+// ФУНКЦИЯ ВЫБОРА ГЕОМЕТРИИ (Объемные фигуры)
+function getGeometry(type) {
+    if (type === 'aao') {
+        // Треугольная призма
+        return new THREE.CylinderGeometry(0.06, 0.06, BASE_HEIGHT, 3);
+    } else if (type === 'generator') {
+        // Квадратный куб
+        return new THREE.BoxGeometry(0.08, BASE_HEIGHT, 0.08);
+    } else {
+        // Круглый цилиндр (Hub, Relay, Dome)
+        return new THREE.CylinderGeometry(0.05, 0.05, BASE_HEIGHT, 16);
+    }
+}
 
 export function initGame(_scene, _camera, _controls) {
     scene = _scene;
@@ -36,12 +48,10 @@ export function initGame(_scene, _camera, _controls) {
     setupUI();
     setupRaycaster();
     
-    // Ждем нажатия кнопки "Начать"
     document.getElementById('start-btn').addEventListener('click', () => {
         const aiCount = parseInt(document.getElementById('ai-count').value) || 1;
         totalPlayers = 1 + aiCount;
         
-        // Инициализация энергии для всех
         for (let i = 1; i <= totalPlayers; i++) {
             playerEnergy[i] = 0;
             playerGenerators[i] = 0;
@@ -125,11 +135,7 @@ function setupUI() {
             if (power > 0 && playerEnergy[currentPlayer] >= cost) {
                 playerEnergy[currentPlayer] -= cost;
                 updateUI();
-                
-                // Для игрока используем текущий угол и силу
-                executeShot(selectedBase, currentAngle, power, selectedModuleType, () => {
-                    // Ничего не делаем после выстрела игрока, ждем кнопку конец хода
-                });
+                executeShot(selectedBase, currentAngle, power, selectedModuleType, () => {});
             } else if (power > 0) {
                 alert("Не хватает энергии!");
             }
@@ -155,7 +161,6 @@ function spinEnergy() {
 function endTurn() {
     if (gameOver) return;
     
-    // Сброс защит для ВСЕХ баз в начале нового хода
     bases.forEach(b => {
         if (b.type === 'dome') {
             b.shieldHits = 0;
@@ -168,7 +173,6 @@ function endTurn() {
         }
     });
 
-    // Переход хода
     currentPlayer++;
     if (currentPlayer > totalPlayers) currentPlayer = 1;
 
@@ -185,17 +189,15 @@ function endTurn() {
 
     updateUI();
 
-    // Если сейчас ход ИИ - запускаем его
     if (currentPlayer > 1) {
         isAITurn = true;
-        document.getElementById('bottom-panel').style.pointerEvents = 'none'; // Блокируем интерфейс для игрока
+        document.getElementById('bottom-panel').style.pointerEvents = 'none';
         document.getElementById('bottom-panel').style.opacity = '0.5';
         setTimeout(playAITurn, 1500);
     } else {
         isAITurn = false;
         document.getElementById('bottom-panel').style.pointerEvents = 'auto';
         document.getElementById('bottom-panel').style.opacity = '1';
-        // Фокусируем камеру на базе Игрока 1
         let hub = bases.find(b => b.owner === 1 && b.type === 'hub');
         if (hub) {
             camera.position.copy(hub.position.clone().normalize().multiplyScalar(PLANET_RADIUS + 10));
@@ -207,44 +209,33 @@ function endTurn() {
 
 function playAITurn() {
     if (gameOver) return;
-
-    // 1. Крутим колесо
     spinEnergy();
     
     setTimeout(() => {
-        // 2. Ищем свои базы, с которых можно стрелять
         let myBases = bases.filter(b => b.owner === currentPlayer && (b.type === 'hub' || b.type === 'relay'));
         
         if (myBases.length > 0) {
-            // Выбираем случайную базу
             let startBase = myBases[Math.floor(Math.random() * myBases.length)];
-            
-            // Выбираем модуль: ИИ любит строить реле (чтобы расширяться) или кидать бомбы
-            let module = Math.random() > 0.3 ? 'relay' : 'bomb'; // 70% реле, 30% бомба
+            let module = Math.random() > 0.3 ? 'relay' : 'bomb'; 
             let cost = getModuleCost(module);
             
             if (playerEnergy[currentPlayer] >= cost) {
                 playerEnergy[currentPlayer] -= cost;
                 updateUI();
                 
-                // Случайный угол (0-360) и сила (2-10)
                 let randomAngle = Math.random() * 360;
                 let randomPower = Math.random() * 8 + 2; 
                 
-                // Фокусируем камеру на базе ИИ, чтобы игрок видел выстрел
                 camera.position.copy(startBase.position.clone().normalize().multiplyScalar(PLANET_RADIUS + 10));
                 controls.target.copy(startBase.position);
                 controls.update();
                 
-                // Стреляем! По завершении - передаем ход
                 executeShot(startBase, randomAngle, randomPower, module, () => {
-                    setTimeout(endTurn, 1000); // Пауза перед концом хода
+                    setTimeout(endTurn, 1000); 
                 });
                 return;
             }
         }
-        
-        // Если энергии нет или нет баз - просто пропускаем ход
         setTimeout(endTurn, 1000);
     }, 1500);
 }
@@ -266,16 +257,14 @@ function updateUI() {
 function startGame() {
     let positions = [];
 
-    // Создаем базы для всех игроков на расстоянии друг от друга
     for (let p = 1; p <= totalPlayers; p++) {
         let pos;
         let valid = false;
         while (!valid) {
             pos = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(PLANET_RADIUS);
             valid = true;
-            // Проверяем, чтобы не спавнились слишком близко к другим базам
             for (let existingPos of positions) {
-                if (pos.angleTo(existingPos) < Math.PI / 3) { // Минимум 60 градусов
+                if (pos.angleTo(existingPos) < Math.PI / 3) { 
                     valid = false;
                     break;
                 }
@@ -283,14 +272,13 @@ function startGame() {
         }
         positions.push(pos);
 
-        const hub = new THREE.Mesh(baseGeometry, new THREE.MeshBasicMaterial({ color: playerColors[p - 1] }));
+        const hub = new THREE.Mesh(getGeometry('hub'), new THREE.MeshBasicMaterial({ color: playerColors[p - 1] }));
         layFlatOnSphere(hub, pos);
         scene.add(hub);
         
         let baseObj = { mesh: hub, position: pos, owner: p, hp: 100, maxHp: 100, type: 'hub', parent: null, lineMesh: null };
         
         if (p === 1) {
-            // Автоматически фокусируемся и выбираем базу Игрока 1
             camera.position.copy(pos.clone().normalize().multiplyScalar(PLANET_RADIUS + 10));
             controls.target.copy(pos);
             controls.update();
@@ -308,8 +296,11 @@ function startGame() {
 }
 
 function layFlatOnSphere(mesh, position) {
-    mesh.position.copy(position);
     const normal = position.clone().normalize();
+    // Приподнимаем на половину высоты базы, чтобы она стояла ровно на поверхности
+    const offsetPos = normal.clone().multiplyScalar(PLANET_RADIUS + (BASE_HEIGHT / 2));
+    
+    mesh.position.copy(offsetPos);
     const up = new THREE.Vector3(0, 1, 0);
     mesh.quaternion.setFromUnitVectors(up, normal);
 }
@@ -383,7 +374,6 @@ function updateArrowDirection() {
     arrowHelper.setDirection(currentDirection);
 }
 
-// Универсальная функция выстрела (и для игрока, и для ИИ)
 function executeShot(startBase, angle, powerValue, moduleToBuild, onComplete) {
     const normal = startBase.position.clone().normalize();
     let baseVector = new THREE.Vector3(1, 0, 0);
@@ -458,7 +448,6 @@ function handleLanding(targetPos, parentBase, moduleToBuild) {
         return; 
     }
 
-    // НОВЫЕ РАДИУСЫ ВЗРЫВА
     if (moduleToBuild === 'bomb') { explode(targetPos, 25, 0.10); return; }
     if (moduleToBuild === 'homing') { explode(targetPos, 50, 0.20); return; }
     if (moduleToBuild === 'drone') { console.log("Дрон разведал!"); return; }
@@ -488,7 +477,7 @@ function createNewBase(pos, parentBase, moduleType) {
     if (moduleType === 'dome') newBaseColor = 0xffff00; 
     if (moduleType === 'aao') newBaseColor = 0xff00ff; 
 
-    const newBase = new THREE.Mesh(baseGeometry, new THREE.MeshBasicMaterial({ color: newBaseColor }));
+    const newBase = new THREE.Mesh(getGeometry(moduleType), new THREE.MeshBasicMaterial({ color: newBaseColor }));
     layFlatOnSphere(newBase, pos);
     scene.add(newBase);
     
@@ -521,11 +510,14 @@ function createNewBase(pos, parentBase, moduleType) {
     }
     
     if (moduleType === 'dome') {
+        // Купол поднимаем на ту же высоту, что и базу
         const domeGeo = new THREE.SphereGeometry(DOME_RADIUS, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2);
-        const domeMat = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+        const domeMat = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
         const domeMesh = new THREE.Mesh(domeGeo, domeMat);
-        domeMesh.position.copy(pos);
+        
         const normal = pos.clone().normalize();
+        domeMesh.position.copy(normal.clone().multiplyScalar(PLANET_RADIUS + (BASE_HEIGHT / 2)));
+        
         const up = new THREE.Vector3(0, 1, 0);
         domeMesh.quaternion.setFromUnitVectors(up, normal);
         scene.add(domeMesh);
@@ -576,7 +568,6 @@ function explode(pos, damage, radius) {
 
     const basesCopy = [...bases];
     for (let b of basesCopy) {
-        // ИСПОЛЬЗУЕМ ПЕРЕДАННЫЙ РАДИУС
         if (b.position.distanceTo(explosionCenter) < radius) { 
             b.hp -= damage;
             if (b.owner === 1) alert(`Попадание! Урон: ${damage}. HP базы: ${b.hp}`);
