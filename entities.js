@@ -12,10 +12,11 @@ for (let i = 0; i < 32; i++) {
 }
 
 export function getGeometry(type) {
-    if (type === 'aao') return new THREE.CylinderGeometry(0.06, 0.06, BASE_HEIGHT, 3);
-    if (type === 'generator') return new THREE.BoxGeometry(0.08, BASE_HEIGHT, 0.08);
-    if (type === 'drone') return new THREE.ConeGeometry(0.06, BASE_HEIGHT * 3, 16); 
-    return new THREE.CylinderGeometry(0.05, 0.05, BASE_HEIGHT, 16);
+    // УВЕЛИЧЕНО ДЛЯ УДОБНОГО КЛИКА (было 0.05)
+    if (type === 'aao') return new THREE.CylinderGeometry(0.12, 0.12, BASE_HEIGHT, 3);
+    if (type === 'generator') return new THREE.BoxGeometry(0.15, BASE_HEIGHT, 0.15);
+    if (type === 'drone') return new THREE.ConeGeometry(0.12, BASE_HEIGHT * 3, 16); 
+    return new THREE.CylinderGeometry(0.15, 0.15, BASE_HEIGHT, 16);
 }
 
 export function layFlatOnSphere(mesh, position) {
@@ -92,19 +93,10 @@ export function createNewBase(scene, bases, pos, parentBase, moduleType, angle, 
     layFlatOnSphere(newBase, pos);
     scene.add(newBase);
     
-    // ИСПРАВЛЕНО: transparent+opacity вместо visible:false, чтобы Raycaster ловил клик
-    const hitArea = new THREE.Mesh(
-        new THREE.SphereGeometry(0.4, 8, 8), 
-        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
-    );
-    hitArea.position.copy(pos);
-    scene.add(hitArea);
-
     const lineData = createEnergyLine(scene, parentBase.position, pos, parentBase.owner);
 
     const baseObj = { 
         mesh: newBase, 
-        hitArea: hitArea,
         position: pos.clone(), 
         owner: parentBase.owner, 
         hp: 100, 
@@ -147,7 +139,6 @@ export function destroyBaseAndChain(scene, bases, base, onGameOver) {
     children.forEach(child => destroyBaseAndChain(scene, bases, child, onGameOver));
 
     scene.remove(base.mesh);
-    if (base.hitArea) scene.remove(base.hitArea);
     if (base.lineMesh) scene.remove(base.lineMesh);
     if (base.domeMesh) scene.remove(base.domeMesh); 
     if (base.healthSprite) scene.remove(base.healthSprite); 
