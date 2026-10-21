@@ -3,7 +3,7 @@ import { executeShot, canShoot } from './combat.js';
 import { playAITurn } from './ai.js';
 import { uiElements, updateUI, clearSelection } from './ui.js';
 
-let scene, camera;
+let scene, camera, controls;
 let bases = [];
 let selectedBase = null;
 let currentAngle = 0;
@@ -23,23 +23,23 @@ let gameOver = false;
 let isAITurn = false;
 let isShooting = false; 
 
+let currentCameraAzimuth = 0; 
 let fogMat;
-
-// УПРАВЛЕНИЕ КАМЕРОЙ
-let cameraTarget = new THREE.Vector3(0, PLANET_RADIUS, 0); // Точка на планете, куда смотрит камера
-let cameraDistance = 20; // Зум
-let cameraAzimuth = 0;   // Угол поворота вокруг базы
 
 let isRotatingLeft = false;
 let isRotatingRight = false;
-let turnInterval = null;
+const ROTATION_SPEED = 0.02;
+
+// ДЛЯ ПЛАВНОГО ВРАЩЕНИЯ СТРЕЛКИ
+let turnInterval = null; 
 
 let isPanning = false;
 let panMouse = { x: 0, y: 0 };
 
-export function initGame(_scene, _camera) {
+export function initGame(_scene, _camera, _controls) {
     scene = _scene;
     camera = _camera;
+    controls = _controls;
 
     window.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -47,51 +47,73 @@ export function initGame(_scene, _camera) {
     arrowHelper.visible = false;
     scene.add(arrowHelper);
 
-    // ЗУМ КОЛЕСИКОМ
-    window.addEventListener('wheel', (e) => {
-        if (isAITurn || gameOver) return;
-        cameraDistance += e.deltaY * 0.01;
-        cameraDistance = Math.max(2, Math.min(30, cameraDistance));
-    });
-
     setupFogOfWar();
     setupEventListeners();
 }
 
-// НАША РУЧНАЯ КАМЕРА (НИКОГДА НЕ ЛОМАЕТСЯ)
-export function updateCamera() {
-    if (!selectedBase) {
-        // Камера по умолчанию (обзор всей планеты)
-        cameraTarget.set(0, 0, 0);
-        camera.position.set(0, 20, 20);
-        camera.up.set(0, 1, 0);
-        camera.lookAt(0, 0, 0);
-        return;
+export function updateCameraTilt() {
+    if (!selectedBase || isAITurn || isShooting || isPanning) return;
+
+    if (isRotatingLeft || isRotatingRight) {
+        const target = selectedBase.position;
+        const normal = target.clone().normalize();
+        const step = isRotatingLeft ? ROTATION_SPEED : -ROTATION_SPEED;
+
+        currentCameraAzimuth += step;
+
+        const offset = camera.position.clone().sub(target);
+        offset.applyAxisAngle(normal, step);
+        camera.position.copy(target).add(offset);
+        controls.update();
     }
 
-    if (isRotatingLeft) cameraAzimuth -= 0.03;
-    if (isRotatingRight) cameraAzimuth += 0.03;
-
-    const normal = cameraTarget.clone().normalize(); // Вектор от центра планеты вверх
-    const up = new THREE.Vector3(0, 1, 0);
+    const target = controls.target; 
+    const normal = target.clone().normalize();
+    const dist = camera.position.distanceTo(target);
     
-    // Строим касательные (оси X и Z на поверхности)
-    let tangent = new THREE.Vector3().crossVectors(normal, up).normalize();
-    if (tangent.lengthSq() < 0.1) tangent.set(1, 0, 0).cross(normal).normalize();
-    let bitangent = new THREE.Vector3().crossVectors(normal, tangent).normalize();
-
-    // Наклон камеры (от 10 до 25 градусов к поверхности)
-    let t = (cameraDistance - 2) / (20 - 2);
+    const minDist = 1.5;  
+    const maxDist = 20;   
+    
+    let t = (dist - minDist) / (maxDist - minDist);
     t = Math.max(0, Math.min(1, t));
-    const phi = THREE.MathUtils.degToRad(10 + 15 * (1 - t));
+    
+    const targetPhi = THREE.MathUtils.degToRad(10 + 15 * (1 - t)); 
+    
+    const offset = camera.position.clone().sub(target);
+    const currentPhi = offset.angleTo(normal);
+    
+    if (Math.abs(currentPhi - targetPhi) > 0.005) {
+        const axis = new THREE.Vector3().crossVectors(offset, normal).normalize();
+        if (axis.lengthSq() > 0.001) {
+            offset.applyAxisAngle(axis, (currentPhi - targetPhi) * 0.1);
+            camera.position.copy(target).add(offset);
+        }
+    }
+}
 
-    // Позиция камеры
-    const offset = normal.clone().multiplyScalar(Math.cos(phi) * cameraDistance)
-                         .add(tangent.clone().multiplyScalar(Math.sin(phi) * cameraDistance).applyAxisAngle(normal, cameraAzimuth));
+function centerCameraOnBase(base) {
+    const normal = base.position.clone().normalize();
+    let currentDist = camera.position.distanceTo(controls.target);
+    if (currentDist < 1.5 || currentDist > 25 || isNaN(currentDist)) {
+        currentDist = 20; 
+    }
 
-    camera.position.copy(cameraTarget).add(offset);
-    camera.up.copy(normal); // Камера смотрит "вверх" от планеты
-    camera.lookAt(cameraTarget);
+    let baseTangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
+    if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
+    let tangent = baseTangent.applyAxisAngle(normal, currentCameraAzimuth);
+    
+    const minDist = 1.5;
+    const maxDist = 20;
+    let t = (currentDist - minDist) / (maxDist - minDist);
+    t = Math.max(0, Math.min(1, t));
+    const targetPhi = THREE.MathUtils.degToRad(10 + 15 * (1 - t));
+
+    const offset = normal.clone().multiplyScalar(Math.cos(targetPhi) * currentDist)
+                         .add(tangent.clone().multiplyScalar(Math.sin(targetPhi) * currentDist));
+                         
+    camera.position.copy(base.position).add(offset);
+    controls.target.copy(base.position);
+    controls.update();
 }
 
 function setupFogOfWar() {
@@ -106,7 +128,7 @@ function setupFogOfWar() {
             varying vec3 vPos; uniform vec4 uSources[50]; uniform int uCount;
             void main() {
                 vec3 normPos = normalize(vPos);
-                float alpha = 0.98; 
+                float alpha = 0.98; // КАК БЫЛО
                 for(int i = 0; i < 50; i++) {
                     if(i >= uCount) break;
                     vec3 src = normalize(uSources[i].xyz);
@@ -175,7 +197,6 @@ function stopArrowTurn() {
 }
 
 function setupEventListeners() {
-    // ПКМ - ПОЛЕТ НАД ПЛАНЕТОЙ
     window.addEventListener('pointerdown', (e) => {
         if (e.button === 2 && !isAITurn && !gameOver) {
             isPanning = true;
@@ -191,22 +212,34 @@ function setupEventListeners() {
             panMouse.x = e.clientX;
             panMouse.y = e.clientY;
 
-            const normal = cameraTarget.clone().normalize();
+            const target = controls.target;
+            const normal = target.clone().normalize();
+            
             let up = new THREE.Vector3(0, 1, 0);
             let tangentX = new THREE.Vector3().crossVectors(normal, up).normalize();
             if (tangentX.lengthSq() < 0.01) tangentX.set(1, 0, 0).cross(normal).normalize();
             let tangentY = new THREE.Vector3().crossVectors(normal, tangentX).normalize();
             
-            const speed = cameraDistance * 0.001;
+            const dist = camera.position.distanceTo(target);
+            const speed = dist * 0.002; // Чуть быстрее и удобнее
+            
             const moveVec = tangentX.multiplyScalar(-dx * speed).add(tangentY.multiplyScalar(dy * speed));
             
-            cameraTarget.add(moveVec);
-            cameraTarget.setLength(10); // Привязка к поверхности
+            camera.position.add(moveVec);
+            target.add(moveVec);
+            target.setLength(10); 
+
+            const dirToCam = camera.position.clone().sub(target).normalize();
+            camera.position.copy(target).add(dirToCam.multiplyScalar(dist));
+
+            controls.update();
         }
     });
 
     window.addEventListener('pointerup', (e) => {
-        if (e.button === 2) isPanning = false;
+        if (e.button === 2) {
+            isPanning = false;
+        }
         if (e.button === 0) {
             isRotatingLeft = false;
             isRotatingRight = false;
@@ -243,14 +276,14 @@ function setupEventListeners() {
 
     uiElements.btnLeft.addEventListener('pointerdown', () => {
         if (isAITurn || gameOver || !selectedBase || isShooting) return;
-        startArrowTurn(1); 
+        startArrowTurn(1); // Вращаем влево
     });
     uiElements.btnLeft.addEventListener('pointerup', stopArrowTurn);
     uiElements.btnLeft.addEventListener('pointerleave', stopArrowTurn);
 
     uiElements.btnRight.addEventListener('pointerdown', () => {
         if (isAITurn || gameOver || !selectedBase || isShooting) return;
-        startArrowTurn(-1); 
+        startArrowTurn(-1); // Вращаем вправо
     });
     uiElements.btnRight.addEventListener('pointerup', stopArrowTurn);
     uiElements.btnRight.addEventListener('pointerleave', stopArrowTurn);
@@ -421,7 +454,7 @@ function endTurn() {
         uiElements.bottomPanel.style.opacity = '0.5';
         
         playAITurn({
-            scene, camera, controls: null, bases, currentPlayer, playerEnergy, playerGenerators, PLANET_RADIUS,
+            scene, camera, controls, bases, currentPlayer, playerEnergy, playerGenerators, PLANET_RADIUS,
             onTurnEnd: endTurn,
             onGameOver: endGame,
             onGeneratorBuilt: (genCount) => {},
@@ -469,10 +502,7 @@ function startGame() {
         
         if (p === 1) {
             selectedBase = baseObj;
-            cameraTarget.copy(selectedBase.position);
-            cameraDistance = 20;
-            cameraAzimuth = 0;
-            
+            centerCameraOnBase(selectedBase); 
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(pos);
             currentAngle = selectedBase.aimAngle;
@@ -526,8 +556,7 @@ function setupRaycaster() {
             if (clickedBase.type !== 'hub' && clickedBase.type !== 'relay') { alert("С этого модуля нельзя стрелять!"); return; }
 
             selectedBase = clickedBase;
-            cameraTarget.copy(selectedBase.position); // Наводим нашу камеру
-            cameraDistance = 20;
+            centerCameraOnBase(selectedBase); 
             
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(selectedBase.position);
