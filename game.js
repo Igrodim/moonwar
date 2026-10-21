@@ -37,24 +37,39 @@ export function initGame(_scene, _camera, _controls) {
     setupEventListeners();
 }
 
-// ФУНКЦИЯ КРАСИВОГО ПОЗИЦИОНИРОВАНИЯ КАМЕРЫ (45 ГРАДУСОВ)
+// ФУНКЦИЯ ПЛАВНОГО ИЗМЕНЕНИЯ УГЛА
+export function updateCameraTilt() {
+    if (!selectedBase || isAITurn) return;
+    
+    const dist = camera.position.distanceTo(controls.target);
+    const minDist = 1.5;  // Ближняя дистанция (угол 65 к поверхности)
+    const maxDist = 15;   // Дальняя дистанция (угол 90 к поверхности)
+
+    let t = (dist - minDist) / (maxDist - minDist);
+    t = Math.max(0, Math.min(1, t));
+
+    // 25 градусов от нормали (65 к поверхности) вблизи, 0 градусов (90 к поверхности) вдали
+    const targetPhi = (25 * Math.PI / 180) * (1 - t);
+
+    // OrbitControls будет плавно тянуть камеру к этому углу благодаря damping
+    controls.minPolarAngle = targetPhi;
+    controls.maxPolarAngle = targetPhi;
+}
+
+// ИНИЦИАЛИЗАЦИЯ КАМЕРЫ ПРИ ВЫБОРЕ БАЗЫ
 function centerCameraOnBase(base) {
     const normal = base.position.clone().normalize();
-    // Создаем касательную, чтобы отлететь вбок
-    let tangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
-    if (tangent.length() < 0.1) tangent = new THREE.Vector3(0, 0, 1).cross(normal).normalize();
     
-    // Угол наклона 45 градусов
-    const tilt = Math.PI / 4;
-    const offset = normal.clone().multiplyScalar(Math.cos(tilt)).add(tangent.multiplyScalar(Math.sin(tilt))).normalize();
-    
-    // Ставим камеру на расстоянии 4 единиц от базы
-    camera.position.copy(base.position).add(offset.multiplyScalar(4));
-    
-    // Выравниваем "верх" камеры по нормали планеты, чтобы горизонт был ровным
+    // Привязываем верх камеры к нормали базы
     camera.up.copy(normal);
     
+    // Ставим камеру на расстоянии 15 единиц (далеко, значит вид строго сверху 90 градусов)
+    camera.position.copy(base.position).add(normal.clone().multiplyScalar(15));
     controls.target.copy(base.position);
+    
+    controls.minPolarAngle = 0;
+    controls.maxPolarAngle = 0;
+
     controls.update();
 }
 
@@ -261,8 +276,6 @@ function rotateCameraAroundTarget(angle) {
     offset.applyAxisAngle(normal, angle);
     camera.position.copy(target).add(offset);
     
-    camera.up.applyAxisAngle(normal, angle);
-    
     controls.update();
 }
 
@@ -371,7 +384,7 @@ function startGame() {
         
         if (p === 1) {
             selectedBase = baseObj;
-            centerCameraOnBase(selectedBase); // ИСПОЛЬЗУЕМ НОВУЮ ФУНКЦИЮ
+            centerCameraOnBase(selectedBase); 
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(pos);
             currentAngle = 0;
@@ -419,7 +432,7 @@ function setupRaycaster() {
             if (clickedBase.type !== 'hub' && clickedBase.type !== 'relay') { alert("С этого модуля нельзя стрелять!"); return; }
 
             selectedBase = clickedBase;
-            centerCameraOnBase(selectedBase); // ИСПОЛЬЗУЕМ НОВУЮ ФУНКЦИЮ
+            centerCameraOnBase(selectedBase); 
             
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(selectedBase.position);
