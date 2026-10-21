@@ -19,9 +19,8 @@ let hasSpunThisTurn = false;
 let selectedModuleType = null; 
 let gameOver = false;
 
-// Радиусы защиты (теперь одинаковые)
 const DOME_RADIUS = 0.35; 
-const AAO_RADIUS = 0.35; // <--- ИЗМЕНЕНО С 0.8 НА 0.35
+const AAO_RADIUS = 0.35; 
 
 export function initGame(_scene, _camera, _controls) {
     scene = _scene;
@@ -85,7 +84,6 @@ function setupUI() {
         document.getElementById('ui-panel').style.display = 'none';
         arrowHelper.visible = false;
         
-        // ВОССТАНОВЛЕНИЕ КУПОЛОВ И ПВО В НАЧАЛЕ НОВОГО ХОДА
         bases.forEach(b => {
             if (b.type === 'dome') {
                 b.shieldHits = 0;
@@ -94,7 +92,7 @@ function setupUI() {
             }
             if (b.type === 'aao') {
                 b.isActive = true;
-                b.mesh.material.color.setHex(0xff00ff); // Возвращаем фиолетовый цвет
+                b.mesh.material.color.setHex(0xff00ff); 
             }
         });
 
@@ -160,22 +158,41 @@ function updateUI() {
 }
 
 function createMainBases() {
+    // 1. Случайная позиция для Игрока 1
     let pos1 = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(PLANET_RADIUS);
     let pos2;
 
+    // 2. Случайная позиция для Игрока 2 (минимум в 90 градусах от первого)
     do {
         pos2 = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(PLANET_RADIUS);
     } while (pos1.angleTo(pos2) < Math.PI / 2);
 
+    // Создаем базу Игрока 1
     const hub1 = new THREE.Mesh(baseGeometry, new THREE.MeshBasicMaterial({ color: 0x00aaff }));
     layFlatOnSphere(hub1, pos1);
     scene.add(hub1);
-    bases.push({ mesh: hub1, position: pos1, owner: 1, hp: 100, maxHp: 100, type: 'hub', parent: null, lineMesh: null });
+    const base1 = { mesh: hub1, position: pos1, owner: 1, hp: 100, maxHp: 100, type: 'hub', parent: null, lineMesh: null };
+    bases.push(base1);
 
+    // Создаем базу Игрока 2
     const hub2 = new THREE.Mesh(baseGeometry, new THREE.MeshBasicMaterial({ color: 0xff0000 }));
     layFlatOnSphere(hub2, pos2);
     scene.add(hub2);
     bases.push({ mesh: hub2, position: pos2, owner: 2, hp: 100, maxHp: 100, type: 'hub', parent: null, lineMesh: null });
+
+    // --- ФОКУС НА БАЗЕ ИГРОКА 1 ---
+    // 1. Перемещаем камеру так, чтобы она смотрела прямо на базу снаружи (на расстоянии 10 от базы)
+    camera.position.copy(pos1.clone().normalize().multiplyScalar(PLANET_RADIUS + 10));
+    controls.target.copy(pos1);
+    controls.update();
+
+    // 2. Автоматически "выбираем" эту базу (как будто игрок по ней кликнул)
+    selectedBase = base1;
+    document.getElementById('ui-panel').style.display = 'block';
+    arrowHelper.position.copy(selectedBase.position);
+    currentAngle = 0;
+    updateArrowDirection();
+    arrowHelper.visible = true;
 }
 
 function layFlatOnSphere(mesh, position) {
@@ -280,21 +297,19 @@ function shootBase() {
         let t = elapsed / duration;
         
         if (t <= 1) {
-            // 1. ПРОВЕРКА ПВО В ПОЛЕТЕ
             for (let b of bases) {
                 if (b.type === 'aao' && b.isActive && b.owner !== parentBase.owner) {
                     if (b.position.distanceTo(projectile.position) < AAO_RADIUS) {
                         b.isActive = false;
-                        b.mesh.material.color.setHex(0x555555); // Серый цвет (неактивно)
-                        explode(projectile.position, 0); // Визуальный взрыв
+                        b.mesh.material.color.setHex(0x555555); 
+                        explode(projectile.position, 0); 
                         scene.remove(projectile);
                         console.log("Снаряд сбит ПВО!");
-                        return; // Снаряд уничтожен
+                        return; 
                     }
                 }
             }
 
-            // 2. ДВИЖЕНИЕ
             const surfacePoint = new THREE.Vector3().copy(startPos).lerp(targetPos, t).normalize().multiplyScalar(PLANET_RADIUS);
             const heightOffset = Math.sin(t * Math.PI) * maxHeight;
             const normal = surfacePoint.clone().normalize();
@@ -309,7 +324,6 @@ function shootBase() {
 }
 
 function handleLanding(targetPos, parentBase, moduleToBuild) {
-    // 1. ПРОВЕРКА КУПОЛА
     let domeInRange = bases.find(b => b.type === 'dome' && b.owner !== parentBase.owner && b.position.distanceTo(targetPos) < DOME_RADIUS);
 
     if (domeInRange && !domeInRange.isDisabled) {
@@ -326,12 +340,10 @@ function handleLanding(targetPos, parentBase, moduleToBuild) {
         return; 
     }
 
-    // 2. ЛОГИКА ДЛЯ БОМБ И РАКЕТ
     if (moduleToBuild === 'bomb') { explode(targetPos, 25); return; }
     if (moduleToBuild === 'homing') { explode(targetPos, 50); return; }
     if (moduleToBuild === 'drone') { console.log("Дрон разведал!"); return; }
 
-    // 3. СТРОИТЕЛЬСТВО (КОЛЛИЗИИ)
     let collision = false;
     for (let b of bases) {
         if (b === parentBase) continue; 
