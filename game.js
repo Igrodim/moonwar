@@ -51,9 +51,8 @@ export function initGame(_scene, _camera, _controls) {
 }
 
 export function updateCameraTilt() {
-    // 1. ВРАЩЕНИЕ СТРЕЛКИ (КНОПКИ ◀ ▶)
     if (isTurningLeft || isTurningRight) {
-        if (selectedBase && !isAITurn && !isShooting) {
+        if (selectedBase && !isAITurn && !isShooting && !isPanning) {
             const step = isTurningLeft ? 2 : -2; 
             currentAngle += step;
             selectedBase.aimAngle = currentAngle;
@@ -63,7 +62,6 @@ export function updateCameraTilt() {
 
     if (!selectedBase || isAITurn || isShooting || isPanning) return;
 
-    // 2. ВРАЩЕНИЕ КАМЕРЫ (КЛАВИШИ A/D)
     if (isRotatingLeft || isRotatingRight) {
         const target = selectedBase.position;
         const normal = target.clone().normalize();
@@ -74,22 +72,20 @@ export function updateCameraTilt() {
         const offset = camera.position.clone().sub(target);
         offset.applyAxisAngle(normal, step);
         camera.position.copy(target).add(offset);
-        
-        camera.up.applyAxisAngle(normal, step); 
     }
 
-    // 3. НАКЛОН ПРИ ЗУМЕ
     const target = controls.target; 
     const normal = target.clone().normalize();
     const dist = camera.position.distanceTo(target);
     
+    // Увеличили минимальный угол, чтобы камера не смотрела ровно вниз (иначе ломается Raycaster)
     const minDist = 1.5;  
     const maxDist = 20;   
     
     let t = (dist - minDist) / (maxDist - minDist);
     t = Math.max(0, Math.min(1, t));
     
-    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t)); 
+    const targetPhi = THREE.MathUtils.degToRad(10 + 15 * (1 - t)); 
     
     const offset = camera.position.clone().sub(target);
     const currentPhi = offset.angleTo(normal);
@@ -118,14 +114,14 @@ function centerCameraOnBase(base) {
     const maxDist = 20;
     let t = (currentDist - minDist) / (maxDist - minDist);
     t = Math.max(0, Math.min(1, t));
-    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t));
+    const targetPhi = THREE.MathUtils.degToRad(10 + 15 * (1 - t));
 
     const offset = normal.clone().multiplyScalar(Math.cos(targetPhi) * currentDist)
                          .add(tangent.clone().multiplyScalar(Math.sin(targetPhi) * currentDist));
                          
     camera.position.copy(base.position).add(offset);
     controls.target.copy(base.position);
-    camera.up.copy(normal); // Оставляем как было в рабочей версии
+    // Убрали camera.up.copy(normal), чтобы камера не ломалась и не вставала боком
     controls.update();
 }
 
@@ -174,6 +170,7 @@ export function updateFogOfWar() {
     bases.forEach(base => {
         if (base.owner === 1) {
             base.mesh.visible = true;
+            if (base.hitArea) base.hitArea.visible = true;
             if (base.lineMesh) base.lineMesh.visible = true;
             if (base.domeMesh) base.domeMesh.visible = true;
             if (base.healthSprite) base.healthSprite.visible = true;
@@ -185,6 +182,7 @@ export function updateFogOfWar() {
             if (ally.position.distanceTo(base.position) < radius) { inVision = true; break; }
         }
         base.mesh.visible = inVision;
+        if (base.hitArea) base.hitArea.visible = inVision;
         if (base.lineMesh) base.lineMesh.visible = inVision && (base.parent ? base.parent.mesh.visible : false);
         if (base.domeMesh) base.domeMesh.visible = inVision;
         if (base.healthSprite) base.healthSprite.visible = inVision;
@@ -496,7 +494,15 @@ function startGame() {
         layFlatOnSphere(hub, pos);
         scene.add(hub);
         
-        let baseObj = { mesh: hub, position: pos, owner: p, hp: 100, maxHp: 100, type: 'hub', parent: null, angle: 0, lineMesh: null, visionRadius: VISION_RADIUS, aimAngle: 0 };
+        // НЕВИДИМАЯ ЗОНА КЛИКА ДЛЯ ГЛАВНОЙ БАЗЫ
+        const hitArea = new THREE.Mesh(
+            new THREE.SphereGeometry(0.3, 8, 8), 
+            new THREE.MeshBasicMaterial({ visible: false })
+        );
+        hitArea.position.copy(pos);
+        scene.add(hitArea);
+        
+        let baseObj = { mesh: hub, hitArea: hitArea, position: pos, owner: p, hp: 100, maxHp: 100, type: 'hub', parent: null, angle: 0, lineMesh: null, visionRadius: VISION_RADIUS, aimAngle: 0 };
         bases.push(baseObj);
         createHealthBar(scene, baseObj);
         
@@ -534,12 +540,13 @@ function setupRaycaster() {
         camera.updateMatrixWorld();
         raycaster.setFromCamera(mouse, camera);
         
-        const baseMeshes = bases.filter(b => b.mesh.visible).map(b => b.mesh);
-        const intersects = raycaster.intersectObjects(baseMeshes);
+        // ИСПОЛЬЗУЕМ НЕВИДИМЫЕ ЗОНЫ КЛИКА
+        const hitAreas = bases.filter(b => b.hitArea.visible).map(b => b.hitArea);
+        const intersects = raycaster.intersectObjects(hitAreas);
 
         if (intersects.length > 0) {
-            const clickedMesh = intersects[0].object;
-            const clickedBase = bases.find(b => b.mesh === clickedMesh);
+            const clickedHitArea = intersects[0].object;
+            const clickedBase = bases.find(b => b.hitArea === clickedHitArea);
             
             if (selectedModuleType === 'heal') {
                 if (clickedBase.owner === currentPlayer && playerEnergy[currentPlayer] >= 1) {
