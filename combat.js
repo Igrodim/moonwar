@@ -35,7 +35,7 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
     if (moduleToBuild === 'homing') projectileColor = 0xff00ff; 
     if (moduleToBuild === 'drone') projectileColor = 0x00ffff; 
 
-    const projectile = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: projectileColor }));
+    const projectile = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), new THREE.MeshBasicMaterial({ color: projectileColor }));
     projectile.position.copy(startBase.position);
     scene.add(projectile);
 
@@ -82,7 +82,6 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
             requestAnimationFrame(animateFlight);
         } else {
             scene.remove(projectile);
-            // ОБЕСПЕЧИВАЕМ СНЯТИЕ БЛОКИРОВКИ В ЛЮБОМ СЛУЧАЕ
             try {
                 handleLanding(scene, bases, targetPos, startBase, moduleToBuild, angle, playerGenerators, onGeneratorBuilt, onGameOver); 
             } catch (err) {
