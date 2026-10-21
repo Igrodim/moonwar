@@ -12,7 +12,9 @@ export const uiElements = {
     moduleBtns: document.querySelectorAll('.module-btn'),
     startScreen: document.getElementById('start-screen'),
     startBtn: document.getElementById('start-btn'),
-    aiCountInput: document.getElementById('ai-count')
+    aiCountInput: document.getElementById('ai-count'),
+    rotateLeft: document.getElementById('rotate-left'),
+    rotateRight: document.getElementById('rotate-right')
 };
 
 export function updateUI(currentPlayer, energy, playerColors) {
