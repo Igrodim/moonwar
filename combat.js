@@ -14,14 +14,15 @@ export function canShoot(bases, startBase, angle, moduleToBuild) {
     return { allowed: true, snappedAngle: snappedAngle, sector: sector };
 }
 
-export function executeShot(scene, bases, startBase, angle, powerValue, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver, onComplete, currentPlayer, VISION_RADIUS) {
+export function executeShot(scene, bases, startBase, angle, powerValue, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver, onComplete, playerId, VISION_RADIUS) {
     const normal = startBase.position.clone().normalize();
     let baseVector = new THREE.Vector3(1, 0, 0);
     if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
     let tangent = baseVector.cross(normal).normalize();
     tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(angle));
     
-    const distance = powerValue * 0.15;
+    // МИНИМАЛЬНАЯ ДИСТАНЦИЯ 0.15, чтобы не падало друг на друга
+    const distance = 0.15 + powerValue * 0.15;
     const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(distance)).normalize().multiplyScalar(PLANET_RADIUS);
 
     let projectileColor = 0xffaa00;
@@ -43,15 +44,17 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
         let t = elapsed / duration;
         
         if (t <= 1) {
-            if (startBase.owner !== currentPlayer) {
+            if (startBase.owner !== 1) {
                 let visible = false;
                 for (let b of bases) {
-                    if (b.owner === currentPlayer && b.position.distanceTo(projectile.position) < (b.visionRadius || VISION_RADIUS)) {
+                    if (b.owner === 1 && b.position.distanceTo(projectile.position) < (b.visionRadius || VISION_RADIUS)) {
                         visible = true;
                         break;
                     }
                 }
                 projectile.visible = visible;
+            } else {
+                projectile.visible = true;
             }
 
             for (let b of bases) {
@@ -81,7 +84,6 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
     animateFlight();
 }
 
-// ИСПРАВЛЕНО: проверка игнорирует линии от той же базы
 export function checkLineIntersection(bases, startPos, endPos, parentBase) {
     const midPoint = startPos.clone().lerp(endPos, 0.5);
     const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + 0.3);
@@ -90,7 +92,7 @@ export function checkLineIntersection(bases, startPos, endPos, parentBase) {
 
     for (let b of bases) {
         if (!b.parent || !b.curve) continue; 
-        if (b.parent === parentBase) continue; // Игнорируем линии от этой же базы!
+        if (b.parent === parentBase) continue; 
         
         const existingPoints = b.curve.getPoints(15);
         for (let p1 of newPoints) {
