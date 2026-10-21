@@ -2,6 +2,8 @@ export const PLANET_RADIUS = 10;
 export const BASE_HEIGHT = 0.1;
 export const DOME_RADIUS = 0.35;
 export const AAO_RADIUS = 0.35; 
+export const VISION_RADIUS = 0.75;        // Обзор обычной базы
+export const RECON_VISION_RADIUS = 1.5;   // Обзор разведвышки
 
 export const playerColors = [];
 for (let i = 0; i < 32; i++) {
@@ -12,6 +14,8 @@ for (let i = 0; i < 32; i++) {
 export function getGeometry(type) {
     if (type === 'aao') return new THREE.CylinderGeometry(0.06, 0.06, BASE_HEIGHT, 3);
     if (type === 'generator') return new THREE.BoxGeometry(0.08, BASE_HEIGHT, 0.08);
+    // Разведвышка - это конус
+    if (type === 'recon') return new THREE.ConeGeometry(0.06, BASE_HEIGHT * 3, 16); 
     return new THREE.CylinderGeometry(0.05, 0.05, BASE_HEIGHT, 16);
 }
 
@@ -26,11 +30,13 @@ export function createEnergyLine(scene, startPos, endPos, owner) {
     const midPoint = startPos.clone().lerp(endPos, 0.5);
     const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + 0.3);
     const curve = new THREE.QuadraticBezierCurve3(startPos, controlPoint, endPos);
+    
     const tubeGeometry = new THREE.TubeGeometry(curve, 20, 0.008, 8, false);
     const tubeMaterial = new THREE.MeshBasicMaterial({ color: playerColors[owner - 1] });
     const tube = new THREE.Mesh(tubeGeometry, tubeMaterial);
     scene.add(tube);
-    return tube;
+    
+    return { tube, curve };
 }
 
 export function createNewBase(scene, bases, pos, parentBase, moduleType, sector, playerGenerators, onGeneratorBuilt) {
@@ -40,16 +46,26 @@ export function createNewBase(scene, bases, pos, parentBase, moduleType, sector,
     if (moduleType === 'generator') newBaseColor = 0x00ff00; 
     if (moduleType === 'dome') newBaseColor = 0xffff00; 
     if (moduleType === 'aao') newBaseColor = 0xff00ff; 
+    if (moduleType === 'recon') newBaseColor = 0x00ffff; // Голубая вышка
 
     const newBase = new THREE.Mesh(getGeometry(moduleType), new THREE.MeshBasicMaterial({ color: newBaseColor }));
     layFlatOnSphere(newBase, pos);
     scene.add(newBase);
     
-    const lineMesh = createEnergyLine(scene, parentBase.position, pos, parentBase.owner);
+    const lineData = createEnergyLine(scene, parentBase.position, pos, parentBase.owner);
 
     const baseObj = { 
-        mesh: newBase, position: pos.clone(), owner: parentBase.owner, 
-        hp: 100, maxHp: 100, type: moduleType, parent: parentBase, sector: sector, lineMesh: lineMesh
+        mesh: newBase, 
+        position: pos.clone(), 
+        owner: parentBase.owner, 
+        hp: 100, 
+        maxHp: 100, 
+        type: moduleType, 
+        parent: parentBase, 
+        sector: sector, 
+        lineMesh: lineData.tube,
+        curve: lineData.curve,
+        visionRadius: moduleType === 'recon' ? RECON_VISION_RADIUS : VISION_RADIUS // Задаем радиус обзора
     };
     
     if (moduleType === 'dome') { baseObj.shieldHits = 0; baseObj.isDisabled = false; }
