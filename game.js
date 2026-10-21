@@ -1,4 +1,4 @@
-import { PLANET_RADIUS, playerColors, getGeometry, layFlatOnSphere } from './entities.js';
+import { PLANET_RADIUS, playerColors, getGeometry, layFlatOnSphere, VISION_RADIUS } from './entities.js';
 import { executeShot, canShoot } from './combat.js';
 import { playAITurn } from './ai.js';
 import { uiElements, updateUI, clearSelection } from './ui.js';
@@ -32,6 +32,35 @@ export function initGame(_scene, _camera, _controls) {
     scene.add(arrowHelper);
 
     setupEventListeners();
+}
+
+export function updateFogOfWar() {
+    if (gameOver) return;
+    const myBases = bases.filter(b => b.owner === currentPlayer);
+    
+    bases.forEach(base => {
+        if (base.owner === currentPlayer) {
+            base.mesh.visible = true;
+            if (base.lineMesh) base.lineMesh.visible = true;
+            if (base.domeMesh) base.domeMesh.visible = true;
+            return;
+        }
+
+        let inVision = false;
+        for (let ally of myBases) {
+            const radius = ally.visionRadius || VISION_RADIUS;
+            if (ally.position.distanceTo(base.position) < radius) {
+                inVision = true;
+                break;
+            }
+        }
+
+        base.mesh.visible = inVision;
+        if (base.lineMesh) {
+            base.lineMesh.visible = inVision && (base.parent ? base.parent.mesh.visible : false);
+        }
+        if (base.domeMesh) base.domeMesh.visible = inVision;
+    });
 }
 
 function setupEventListeners() {
@@ -103,7 +132,7 @@ function setupEventListeners() {
                 executeShot(scene, bases, selectedBase, check.snappedAngle, power, selectedModuleType, check.sector, playerGenerators, 
                     (genCount) => alert(`Генератор! Твоя выработка: от ${5 + genCount} до ${8 + genCount}`),
                     (owner) => endGame(owner),
-                    () => {}
+                    () => updateFogOfWar() 
                 );
             } else if (power > 0) {
                 alert("Не хватает энергии!");
@@ -175,6 +204,7 @@ function endTurn() {
     uiElements.spinBtn.innerText = '⚡';
 
     updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
+    updateFogOfWar(); 
 
     if (currentPlayer > 1) {
         isAITurn = true;
@@ -186,7 +216,8 @@ function endTurn() {
             onTurnEnd: endTurn,
             onGameOver: endGame,
             onGeneratorBuilt: (genCount) => {},
-            updateUI: () => updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors)
+            updateUI: () => updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors),
+            updateFog: updateFogOfWar
         });
     } else {
         isAITurn = false;
@@ -229,7 +260,7 @@ function startGame() {
         layFlatOnSphere(hub, pos);
         scene.add(hub);
         
-        let baseObj = { mesh: hub, position: pos, owner: p, hp: 100, maxHp: 100, type: 'hub', parent: null, sector: -1, lineMesh: null };
+        let baseObj = { mesh: hub, position: pos, owner: p, hp: 100, maxHp: 100, type: 'hub', parent: null, sector: -1, lineMesh: null, visionRadius: VISION_RADIUS };
         bases.push(baseObj);
         
         if (p === 1) {
@@ -247,6 +278,7 @@ function startGame() {
     
     setupRaycaster();
     updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
+    updateFogOfWar();
 }
 
 function setupRaycaster() {
@@ -261,7 +293,8 @@ function setupRaycaster() {
         mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
         raycaster.setFromCamera(mouse, camera);
-        const baseMeshes = bases.map(b => b.mesh);
+        
+        const baseMeshes = bases.filter(b => b.mesh.visible).map(b => b.mesh);
         const intersects = raycaster.intersectObjects(baseMeshes);
 
         if (intersects.length > 0) {
