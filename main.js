@@ -1,5 +1,5 @@
 import { createPlanet } from './planet.js';
-import { initGame } from './game.js';
+import { initGame, updateCameraTilt } from './game.js';
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
@@ -23,8 +23,8 @@ controls.dampingFactor = 0.05;
 controls.enablePan = false;    
 controls.enableRotate = false; 
 controls.zoomSpeed = 1.2;
-controls.minDistance = 1.5; // Минимальное расстояние от базы (не дает провалиться)
-controls.maxDistance = 30;  // Максимальное отдаление
+controls.minDistance = 1.5; 
+controls.maxDistance = 25; 
 
 createPlanet(scene);
 initGame(scene, camera, controls);
@@ -37,8 +37,10 @@ window.addEventListener('resize', () => {
 
 function animate() {
     requestAnimationFrame(animate);
+    
+    updateCameraTilt(); // Вызываем каждый кадр для плавного наклона
     controls.update();
-    // Убрали условие camera.position.length() < 10.02, которое вызывало тряску
+    
     renderer.render(scene, camera);
 }
 animate();
