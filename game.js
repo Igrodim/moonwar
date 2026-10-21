@@ -1,5 +1,5 @@
 const PLANET_RADIUS = 10;
-const BASE_HEIGHT = 0.1; // Высота всех баз
+const BASE_HEIGHT = 0.1; 
 
 let scene, camera, controls;
 let bases = [];
@@ -25,17 +25,14 @@ const playerColors = [0x00aaff, 0xff0000, 0x00ff00, 0xffff00, 0xff00ff, 0x00ffff
 
 const DOME_RADIUS = 0.35; 
 const AAO_RADIUS = 0.35; 
+const ANGLE_STEP = 22.5; // 360 / 16 = 22.5
 
-// ФУНКЦИЯ ВЫБОРА ГЕОМЕТРИИ (Объемные фигуры)
 function getGeometry(type) {
     if (type === 'aao') {
-        // Треугольная призма
         return new THREE.CylinderGeometry(0.06, 0.06, BASE_HEIGHT, 3);
     } else if (type === 'generator') {
-        // Квадратный куб
         return new THREE.BoxGeometry(0.08, BASE_HEIGHT, 0.08);
     } else {
-        // Круглый цилиндр (Hub, Relay, Dome)
         return new THREE.CylinderGeometry(0.05, 0.05, BASE_HEIGHT, 16);
     }
 }
@@ -99,8 +96,9 @@ function setupUI() {
         endTurn();
     });
 
-    btnLeft.addEventListener('click', () => { if (selectedBase && !isAITurn) { currentAngle += 15; updateArrowDirection(); } });
-    btnRight.addEventListener('click', () => { if (selectedBase && !isAITurn) { currentAngle -= 15; updateArrowDirection(); } });
+    // ИЗМЕНЕНО: Шаг поворота теперь 22.5 градуса
+    btnLeft.addEventListener('click', () => { if (selectedBase && !isAITurn) { currentAngle += ANGLE_STEP; updateArrowDirection(); } });
+    btnRight.addEventListener('click', () => { if (selectedBase && !isAITurn) { currentAngle -= ANGLE_STEP; updateArrowDirection(); } });
 
     fireBtn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
@@ -223,7 +221,7 @@ function playAITurn() {
                 playerEnergy[currentPlayer] -= cost;
                 updateUI();
                 
-                let randomAngle = Math.random() * 360;
+                let randomAngle = Math.floor(Math.random() * 16) * ANGLE_STEP; // ИИ тоже выбирает из 16 секторов
                 let randomPower = Math.random() * 8 + 2; 
                 
                 camera.position.copy(startBase.position.clone().normalize().multiplyScalar(PLANET_RADIUS + 10));
@@ -276,7 +274,8 @@ function startGame() {
         layFlatOnSphere(hub, pos);
         scene.add(hub);
         
-        let baseObj = { mesh: hub, position: pos, owner: p, hp: 100, maxHp: 100, type: 'hub', parent: null, lineMesh: null };
+        // У хаба нет родителя и нет сектора
+        let baseObj = { mesh: hub, position: pos, owner: p, hp: 100, maxHp: 100, type: 'hub', parent: null, sector: -1, lineMesh: null };
         
         if (p === 1) {
             camera.position.copy(pos.clone().normalize().multiplyScalar(PLANET_RADIUS + 10));
@@ -297,7 +296,6 @@ function startGame() {
 
 function layFlatOnSphere(mesh, position) {
     const normal = position.clone().normalize();
-    // Приподнимаем на половину высоты базы, чтобы она стояла ровно на поверхности
     const offsetPos = normal.clone().multiplyScalar(PLANET_RADIUS + (BASE_HEIGHT / 2));
     
     mesh.position.copy(offsetPos);
@@ -375,11 +373,29 @@ function updateArrowDirection() {
 }
 
 function executeShot(startBase, angle, powerValue, moduleToBuild, onComplete) {
+    // Привязываем угол к сетке (16 направлений)
+    const snappedAngle = Math.round(angle / ANGLE_STEP) * ANGLE_STEP;
+    
+    // Вычисляем номер сектора (от 0 до 15)
+    let sector = Math.round(snappedAngle / ANGLE_STEP) % 16;
+    if (sector < 0) sector += 16; 
+
+    // ПРОВЕРКА: Если это строительный модуль, проверяем, нет ли уже постройки в этом секторе
+    const isBuildingModule = ['relay', 'dome', 'generator', 'aao'].includes(moduleToBuild);
+    
+    if (isBuildingModule) {
+        const existingBuild = bases.find(b => b.parent === startBase && b.sector === sector);
+        if (existingBuild) {
+            alert("В этом направлении уже построен модуль! Выберите другое.");
+            return; // Отменяем выстрел
+        }
+    }
+
     const normal = startBase.position.clone().normalize();
     let baseVector = new THREE.Vector3(1, 0, 0);
     if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
     let tangent = baseVector.cross(normal).normalize();
-    tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(angle));
+    tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(snappedAngle));
     
     const distance = powerValue * 0.15;
     const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(distance)).normalize().multiplyScalar(PLANET_RADIUS);
@@ -424,14 +440,14 @@ function executeShot(startBase, angle, powerValue, moduleToBuild, onComplete) {
             requestAnimationFrame(animateFlight);
         } else {
             scene.remove(projectile);
-            handleLanding(targetPos, startBase, moduleToBuild);
+            handleLanding(targetPos, startBase, moduleToBuild, sector); // Передаем сектор
             if (onComplete) onComplete();
         }
     }
     animateFlight();
 }
 
-function handleLanding(targetPos, parentBase, moduleToBuild) {
+function handleLanding(targetPos, parentBase, moduleToBuild, sector) {
     let domeInRange = bases.find(b => b.type === 'dome' && b.owner !== parentBase.owner && b.position.distanceTo(targetPos) < DOME_RADIUS);
 
     if (domeInRange && !domeInRange.isDisabled) {
@@ -465,11 +481,11 @@ function handleLanding(targetPos, parentBase, moduleToBuild) {
     }
 
     if (!collision) {
-        createNewBase(targetPos, parentBase, moduleToBuild);
+        createNewBase(targetPos, parentBase, moduleToBuild, sector); // Передаем сектор
     }
 }
 
-function createNewBase(pos, parentBase, moduleType) {
+function createNewBase(pos, parentBase, moduleType, sector) {
     const playerColor = playerColors[parentBase.owner - 1];
     let newBaseColor = playerColor;
     
@@ -491,6 +507,7 @@ function createNewBase(pos, parentBase, moduleType) {
         maxHp: 100, 
         type: moduleType, 
         parent: parentBase, 
+        sector: sector, // Сохраняем сектор
         lineMesh: lineMesh
     };
     
@@ -510,7 +527,6 @@ function createNewBase(pos, parentBase, moduleType) {
     }
     
     if (moduleType === 'dome') {
-        // Купол поднимаем на ту же высоту, что и базу
         const domeGeo = new THREE.SphereGeometry(DOME_RADIUS, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2);
         const domeMat = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
         const domeMesh = new THREE.Mesh(domeGeo, domeMat);
@@ -582,7 +598,10 @@ function createEnergyLine(startPos, endPos, owner) {
     const midPoint = startPos.clone().lerp(endPos, 0.5);
     const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + 0.3);
     const curve = new THREE.QuadraticBezierCurve3(startPos, controlPoint, endPos);
-    const tubeGeometry = new THREE.TubeGeometry(curve, 20, 0.02, 8, false);
+    
+    // ТОНКИЕ ЛИНИИ: уменьшили радиус трубы с 0.02 до 0.008
+    const tubeGeometry = new THREE.TubeGeometry(curve, 20, 0.008, 8, false);
+    
     const color = playerColors[owner - 1];
     const tubeMaterial = new THREE.MeshBasicMaterial({ color: color });
     const tube = new THREE.Mesh(tubeGeometry, tubeMaterial);
