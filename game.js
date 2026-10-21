@@ -26,8 +26,8 @@ let isShooting = false;
 let currentCameraAzimuth = 0; 
 let fogMat;
 
-let isRotatingLeft = false;
-let isRotatingRight = false;
+// АНИМАЦИЯ КАМЕРЫ
+let camAnim = { active: false, t: 0, startPos: new THREE.Vector3(), endPos: new THREE.Vector3(), startTarget: new THREE.Vector3(), endTarget: new THREE.Vector3(), startUp: new THREE.Vector3(), endUp: new THREE.Vector3() };
 
 export function initGame(_scene, _camera, _controls) {
     scene = _scene;
@@ -44,6 +44,50 @@ export function initGame(_scene, _camera, _controls) {
     setupEventListeners();
 }
 
+export function updateCameraTilt() {
+    // Если идет анимация перелета - не трогаем камеру
+    if (camAnim.active) {
+        camAnim.t += 0.04; // Скорость перелета
+        if (camAnim.t >= 1) { camAnim.t = 1; camAnim.active = false; }
+        
+        // Плавная интерполяция (easeInOutQuad)
+        let p = camAnim.t < 0.5 ? 2 * camAnim.t * camAnim.t : 1 - Math.pow(-2 * camAnim.t + 2, 2) / 2;
+        
+        camera.position.lerpVectors(camAnim.startPos, camAnim.endPos, p);
+        controls.target.lerpVectors(camAnim.startTarget, camAnim.endTarget, p);
+        camera.up.lerpVectors(camAnim.startUp, camAnim.endUp, p).normalize();
+        controls.update();
+        return;
+    }
+
+    if (!selectedBase || isAITurn || isShooting) return;
+    
+    const target = controls.target; 
+    const normal = target.clone().normalize();
+    const dist = camera.position.distanceTo(target);
+    
+    const minDist = 1.5;  
+    const maxDist = 20;   
+    
+    let t = (dist - minDist) / (maxDist - minDist);
+    t = Math.max(0, Math.min(1, t));
+    
+    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t)); 
+    
+    const offset = camera.position.clone().sub(target);
+    const currentPhi = offset.angleTo(normal);
+    
+    if (Math.abs(currentPhi - targetPhi) > 0.005) {
+        const axis = new THREE.Vector3().crossVectors(offset, normal).normalize();
+        if (axis.lengthSq() > 0.001) {
+            offset.applyAxisAngle(axis, (currentPhi - targetPhi) * 0.1);
+            camera.position.copy(target).add(offset);
+        }
+    }
+    
+    camera.up.lerp(normal, 0.1).normalize();
+}
+
 function centerCameraOnBase(base) {
     const normal = base.position.clone().normalize();
     let currentDist = camera.position.distanceTo(controls.target);
@@ -53,15 +97,28 @@ function centerCameraOnBase(base) {
 
     let baseTangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
     if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
+    let tangent = baseTangent.applyAxisAngle(normal, currentCameraAzimuth);
     
-    const targetPhi = THREE.MathUtils.degToRad(15); 
+    const minDist = 1.5;
+    const maxDist = 20;
+    let t = (currentDist - minDist) / (maxDist - minDist);
+    t = Math.max(0, Math.min(1, t));
+    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t));
 
     const offset = normal.clone().multiplyScalar(Math.cos(targetPhi) * currentDist)
-                         .add(baseTangent.clone().multiplyScalar(Math.sin(targetPhi) * currentDist));
+                         .add(tangent.clone().multiplyScalar(Math.sin(targetPhi) * currentDist));
                          
-    camera.position.copy(base.position).add(offset);
-    controls.target.copy(base.position);
-    controls.update();
+    const newPos = base.position.clone().add(offset);
+    
+    // ЗАПУСКАЕМ ПЛАВНЫЙ ПЕРЕЛЕТ
+    camAnim.startPos.copy(camera.position);
+    camAnim.endPos.copy(newPos);
+    camAnim.startTarget.copy(controls.target);
+    camAnim.endTarget.copy(base.position);
+    camAnim.startUp.copy(camera.up);
+    camAnim.endUp.copy(normal);
+    camAnim.t = 0;
+    camAnim.active = true;
 }
 
 function setupFogOfWar() {
@@ -129,46 +186,18 @@ export function updateFogOfWar() {
 function setupEventListeners() {
     window.addEventListener('keydown', (e) => {
         if (isAITurn || gameOver || !selectedBase || isShooting) return;
-        if (e.repeat) return;
         const key = e.key.toLowerCase();
-        if (key === 'a' || key === 'ф') isRotatingLeft = true; 
-        else if (key === 'd' || key === 'в') isRotatingRight = true;
+        if (key === 'a' || key === 'ф') rotateCameraAroundTarget(-Math.PI / 16); 
+        else if (key === 'd' || key === 'в') rotateCameraAroundTarget(Math.PI / 16);
     });
 
-    window.addEventListener('keyup', (e) => {
-        const key = e.key.toLowerCase();
-        if (key === 'a' || key === 'ф') isRotatingLeft = false;
-        if (key === 'd' || key === 'в') isRotatingRight = false;
-    });
-
-    uiElements.rotateLeft.addEventListener('pointerdown', () => {
+    uiElements.rotateLeft.addEventListener('click', () => {
         if (isAITurn || gameOver || !selectedBase || isShooting) return;
-        isRotatingLeft = true;
+        rotateCameraAroundTarget(-Math.PI / 16);
     });
-    uiElements.rotateLeft.addEventListener('pointerup', () => isRotatingLeft = false);
-    uiElements.rotateLeft.addEventListener('pointerleave', () => isRotatingLeft = false);
-
-    uiElements.rotateRight.addEventListener('pointerdown', () => {
+    uiElements.rotateRight.addEventListener('click', () => {
         if (isAITurn || gameOver || !selectedBase || isShooting) return;
-        isRotatingRight = true;
-    });
-    uiElements.rotateRight.addEventListener('pointerup', () => isRotatingRight = false);
-    uiElements.rotateRight.addEventListener('pointerleave', () => isRotatingRight = false);
-
-    // ВРАЩЕНИЕ СТРЕЛКИ ПО КЛИКУ
-    uiElements.btnLeft.addEventListener('click', () => { 
-        if (selectedBase && !isAITurn && !isShooting) { 
-            currentAngle += (360 / 128); 
-            selectedBase.aimAngle = currentAngle;
-            updateArrowDirection(); 
-        } 
-    });
-    uiElements.btnRight.addEventListener('click', () => { 
-        if (selectedBase && !isAITurn && !isShooting) { 
-            currentAngle -= (360 / 128); 
-            selectedBase.aimAngle = currentAngle;
-            updateArrowDirection(); 
-        } 
+        rotateCameraAroundTarget(Math.PI / 16);
     });
 
     uiElements.spinBtn.addEventListener('click', () => {
@@ -192,6 +221,22 @@ function setupEventListeners() {
     uiElements.endTurnBtn.addEventListener('click', () => {
         if (gameOver || isAITurn || isShooting) return;
         endTurn();
+    });
+
+    // СОХРАНЯЕМ УГОЛ ПРИ ПОВОРОТЕ СТРЕЛКИ
+    uiElements.btnLeft.addEventListener('click', () => { 
+        if (selectedBase && !isAITurn && !isShooting) { 
+            currentAngle += (360 / 128); 
+            selectedBase.aimAngle = currentAngle;
+            updateArrowDirection(); 
+        } 
+    });
+    uiElements.btnRight.addEventListener('click', () => { 
+        if (selectedBase && !isAITurn && !isShooting) { 
+            currentAngle -= (360 / 128); 
+            selectedBase.aimAngle = currentAngle;
+            updateArrowDirection(); 
+        } 
     });
 
     uiElements.fireBtn.addEventListener('pointerdown', (e) => {
@@ -221,10 +266,9 @@ function setupEventListeners() {
             uiElements.powerBar.style.width = '0%';
             
             if (isShooting) return; 
-            if (power <= 0) power = 1; 
 
             const cost = getModuleCost(selectedModuleType);
-            if (playerEnergy[currentPlayer] >= cost) {
+            if (power > 0 && playerEnergy[currentPlayer] >= cost) {
                 
                 const check = canShoot(bases, selectedBase, currentAngle, selectedModuleType);
                 if (!check.allowed) {
@@ -235,12 +279,6 @@ function setupEventListeners() {
                 isShooting = true; 
                 uiElements.fireBtn.disabled = true;
                 uiElements.fireBtn.innerText = "ПОЛЕТ...";
-
-                setTimeout(() => { 
-                    isShooting = false; 
-                    uiElements.fireBtn.disabled = false;
-                    uiElements.fireBtn.innerText = "ЗАЖМИ ДЛЯ ВЫСТРЕЛА";
-                }, 1500);
 
                 playerEnergy[currentPlayer] -= cost;
                 updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
@@ -257,12 +295,10 @@ function setupEventListeners() {
                     1, 
                     VISION_RADIUS
                 );
-            } else if (playerEnergy[currentPlayer] < cost) {
+            } else if (power > 0) {
                 alert("Не хватает энергии!");
             }
         }
-        isRotatingLeft = false;
-        isRotatingRight = false;
     });
 
     uiElements.startBtn.addEventListener('click', () => {
@@ -272,6 +308,24 @@ function setupEventListeners() {
         uiElements.startScreen.style.display = 'none';
         startGame();
     });
+}
+
+function rotateCameraAroundTarget(angle) {
+    if (!selectedBase || isShooting) return;
+    currentCameraAzimuth += angle; 
+    const target = selectedBase.position;
+    const normal = target.clone().normalize();
+    
+    const offset = camera.position.clone().sub(target);
+    offset.applyAxisAngle(normal, angle);
+    camera.position.copy(target).add(offset);
+    
+    if (controls.target.distanceTo(target) < 1.5) {
+        controls.target.copy(target); 
+    }
+    
+    camera.up.applyAxisAngle(normal, angle);
+    controls.update();
 }
 
 function getModuleCost(type) {
@@ -299,9 +353,6 @@ function endTurn() {
     if (gameOver) return;
     
     isShooting = false; 
-    isRotatingLeft = false;
-    isRotatingRight = false;
-    
     uiElements.fireBtn.disabled = false;
     uiElements.fireBtn.innerText = "ЗАЖМИ ДЛЯ ВЫСТРЕЛА";
     
@@ -405,18 +456,14 @@ function setupRaycaster() {
     const mouse = new THREE.Vector2();
 
     window.addEventListener('pointerdown', (event) => {
-        if (event.button !== 0) return; 
-        
-        if (isAITurn || gameOver) return; // Убрали isShooting из проверки!
+        if (event.button !== 0) return;
+        if (isAITurn || gameOver || isShooting || camAnim.active) return;
         if (event.target.closest('#bottom-panel') || event.target.closest('#ui-panel') || event.target.closest('#start-screen')) return;
 
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         mouse.y = (event.clientY / window.innerHeight) * 2 + 1;
 
-        camera.updateMatrixWorld();
-        scene.updateMatrixWorld();
         raycaster.setFromCamera(mouse, camera);
-        
         const baseMeshes = bases.filter(b => b.mesh.visible).map(b => b.mesh);
         const intersects = raycaster.intersectObjects(baseMeshes);
 
@@ -444,6 +491,7 @@ function setupRaycaster() {
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(selectedBase.position);
             
+            // ВОССТАНАВЛИВАЕМ УГОЛ ПРИЦЕЛА
             currentAngle = selectedBase.aimAngle || 0;
             updateArrowDirection();
             arrowHelper.visible = true;
@@ -460,13 +508,7 @@ function updateArrowDirection() {
     const normal = selectedBase.position.clone().normalize();
     let baseVector = new THREE.Vector3(1, 0, 0);
     if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
-    
     let tangent = baseVector.cross(normal).normalize();
-    if (tangent.lengthSq() < 0.1) {
-        baseVector.set(0, 0, 1);
-        tangent = baseVector.cross(normal).normalize();
-    }
-    
     tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(currentAngle));
     arrowHelper.setDirection(tangent);
 }
