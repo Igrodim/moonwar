@@ -1,31 +1,22 @@
 import { PLANET_RADIUS, AAO_RADIUS, createNewBase, destroyBaseAndChain, updateHealthBar } from './entities.js';
 
 export function canShoot(bases, startBase, angle, moduleToBuild) {
-    const ANGLE_STEP = 360 / 128; // 2.8125 градусов (128 направлений)
+    const ANGLE_STEP = 360 / 128; 
     const snappedAngle = Math.round(angle / ANGLE_STEP) * ANGLE_STEP;
     
-    // Приводим угол к диапазону 0-360
     let finalAngle = snappedAngle % 360;
     if (finalAngle < 0) finalAngle += 360;
 
     const isBuildingModule = ['relay', 'dome', 'generator', 'aao', 'drone'].includes(moduleToBuild);
     
     if (isBuildingModule) {
-        // Ищем все существующие постройки от этой базы
         const children = bases.filter(b => b.parent === startBase);
-        
         for (let child of children) {
-            // Вычисляем разницу углов
-            let diff = Math.abs(child.aimAngle - finalAngle);
+            let diff = Math.abs(child.angle - finalAngle);
             if (diff > 180) diff = 360 - diff;
-            
-            // Если разница меньше 7 градусов - запрещаем (чтобы не наслаивались)
-            if (diff < 7) {
-                return { allowed: false, reason: "Слишком близко к другому модулю! Выберите другое направление." };
-            }
+            if (diff < 7) return { allowed: false, reason: "Слишком близко к другому модулю!" };
         }
     }
-    
     return { allowed: true, snappedAngle: finalAngle, sector: 0 };
 }
 
@@ -91,8 +82,14 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
             requestAnimationFrame(animateFlight);
         } else {
             scene.remove(projectile);
-            handleLanding(scene, bases, targetPos, startBase, moduleToBuild, angle, playerGenerators, onGeneratorBuilt, onGameOver); 
-            if (onComplete) onComplete();
+            // ОБЕСПЕЧИВАЕМ СНЯТИЕ БЛОКИРОВКИ В ЛЮБОМ СЛУЧАЕ
+            try {
+                handleLanding(scene, bases, targetPos, startBase, moduleToBuild, angle, playerGenerators, onGeneratorBuilt, onGameOver); 
+            } catch (err) {
+                console.error(err);
+            } finally {
+                if (onComplete) onComplete();
+            }
         }
     }
     animateFlight();
