@@ -118,7 +118,7 @@ export function playAITurn(gameContext) {
 
             let power = ['relay', 'generator'].includes(module) ? 10 : 8;
 
-            executeShot(scene, bases, startBase, bestAngle, power, module, check.sector, playerGenerators, onGeneratorBuilt, onGameOver, () => {
+            executeShot(scene, bases, startBase, bestAngle, power, module, 0, playerGenerators, onGeneratorBuilt, onGameOver, () => {
                 if (updateFog) updateFog(); 
                 setTimeout(performAIAction, 1000); 
             }, currentPlayer, VISION_RADIUS);
