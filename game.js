@@ -53,7 +53,7 @@ export function initGame(_scene, _camera, _controls) {
 export function updateCameraTilt() {
     // 1. ВРАЩЕНИЕ СТРЕЛКИ (КНОПКИ ◀ ▶)
     if (isTurningLeft || isTurningRight) {
-        if (selectedBase && !isAITurn && !isShooting && !isPanning) {
+        if (selectedBase && !isAITurn && !isShooting) {
             const step = isTurningLeft ? 2 : -2; 
             currentAngle += step;
             selectedBase.aimAngle = currentAngle;
@@ -125,7 +125,7 @@ function centerCameraOnBase(base) {
                          
     camera.position.copy(base.position).add(offset);
     controls.target.copy(base.position);
-    camera.up.copy(normal); // КАК В РАБОЧЕЙ ВЕРСИИ
+    camera.up.copy(normal); // Оставляем как было в рабочей версии
     controls.update();
 }
 
@@ -259,7 +259,6 @@ function setupEventListeners() {
         if (key === 'd' || key === 'в') isRotatingRight = false;
     });
 
-    // A/D КАМЕРА
     uiElements.rotateLeft.addEventListener('pointerdown', () => {
         if (isAITurn || gameOver || !selectedBase || isShooting) return;
         isRotatingLeft = true;
@@ -274,7 +273,6 @@ function setupEventListeners() {
     uiElements.rotateRight.addEventListener('pointerup', () => isRotatingRight = false);
     uiElements.rotateRight.addEventListener('pointerleave', () => isRotatingRight = false);
 
-    // ◀ ▶ СТРЕЛКА
     uiElements.btnLeft.addEventListener('pointerdown', () => {
         if (isAITurn || gameOver || !selectedBase || isShooting) return;
         isTurningLeft = true;
