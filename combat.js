@@ -21,8 +21,8 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
     let tangent = baseVector.cross(normal).normalize();
     tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(angle));
     
-    // МИНИМАЛЬНАЯ ДИСТАНЦИЯ 0.15, чтобы не падало друг на друга
-    const distance = 0.15 + powerValue * 0.15;
+    // ЗАЗОР 0.3, чтобы модули не наслаивались
+    const distance = 0.3 + powerValue * 0.15;
     const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(distance)).normalize().multiplyScalar(PLANET_RADIUS);
 
     let projectileColor = 0xffaa00;
