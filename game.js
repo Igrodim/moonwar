@@ -51,7 +51,7 @@ export function initGame(_scene, _camera, _controls) {
 }
 
 export function updateCameraTilt() {
-    // 1. ВРАЩЕНИЕ СТРЕЛКИ (КНОПКИ ◀ ▶). Убрали проверку isPanning, чтобы всегда работало.
+    // 1. ВРАЩЕНИЕ СТРЕЛКИ (КНОПКИ ◀ ▶)
     if (isTurningLeft || isTurningRight) {
         if (selectedBase && !isAITurn && !isShooting) {
             const step = isTurningLeft ? 2 : -2; 
@@ -75,7 +75,7 @@ export function updateCameraTilt() {
         offset.applyAxisAngle(normal, step);
         camera.position.copy(target).add(offset);
         
-        camera.up.copy(normal); 
+        camera.up.applyAxisAngle(normal, step); // Вращаем верх камеры вместе с ней
     }
 
     // 3. НАКЛОН ПРИ ЗУМЕ
@@ -114,6 +114,9 @@ function centerCameraOnBase(base) {
     if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
     let tangent = baseTangent.applyAxisAngle(normal, currentCameraAzimuth);
     
+    // Правильный вектор "верха" для камеры (перпендикулярен взгляду)
+    let upVec = new THREE.Vector3().crossVectors(normal, tangent).normalize();
+
     const minDist = 1.5;
     const maxDist = 20;
     let t = (currentDist - minDist) / (maxDist - minDist);
@@ -125,7 +128,7 @@ function centerCameraOnBase(base) {
                          
     camera.position.copy(base.position).add(offset);
     controls.target.copy(base.position);
-    camera.up.copy(normal); 
+    camera.up.copy(upVec); // ИСПРАВЛЕНО
     controls.update();
 }
 
@@ -232,7 +235,6 @@ function setupEventListeners() {
         }
     });
 
-    // СБРАСЫВАЕМ ВСЕ ФЛАГИ ПРИ ОТПУСКАНИИ ЛЮБОЙ КНОПКИ МЫШИ
     window.addEventListener('pointerup', (e) => {
         if (e.button === 2) {
             isPanning = false;
@@ -260,7 +262,6 @@ function setupEventListeners() {
         if (key === 'd' || key === 'в') isRotatingRight = false;
     });
 
-    // КНОПКИ A/D КАМЕРЫ
     uiElements.rotateLeft.addEventListener('pointerdown', () => {
         if (isAITurn || gameOver || !selectedBase || isShooting) return;
         isRotatingLeft = true;
@@ -275,7 +276,6 @@ function setupEventListeners() {
     uiElements.rotateRight.addEventListener('pointerup', () => isRotatingRight = false);
     uiElements.rotateRight.addEventListener('pointerleave', () => isRotatingRight = false);
 
-    // КНОПКИ НАПРАВЛЕНИЯ СТРЕЛКИ ◀ ▶ (Убрали проверку isPanning)
     uiElements.btnLeft.addEventListener('pointerdown', () => {
         if (isAITurn || gameOver || !selectedBase || isShooting) return;
         isTurningLeft = true;
