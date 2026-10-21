@@ -65,7 +65,6 @@ function setupFogOfWar() {
                     vec3 src = normalize(uSources[i].xyz);
                     float dist = distance(normPos, src);
                     
-                    // Прозрачный в центре, черный на краях радиуса
                     float localAlpha = smoothstep(uSources[i].w, uSources[i].w + 0.02, dist);
                     alpha = min(alpha, localAlpha * 0.98);
                 }
@@ -74,7 +73,7 @@ function setupFogOfWar() {
         `,
         transparent: true,
         depthWrite: false,
-        depthTest: false // РЕНДЕРИМ ТУМАН ПОВЕРХ ВСЕХ ОБЪЕКТОВ
+        depthTest: false
     });
     
     const fogMesh = new THREE.Mesh(fogGeo, fogMat);
@@ -84,7 +83,7 @@ function setupFogOfWar() {
 
 export function updateFogOfWar() {
     if (gameOver) return;
-    const myBases = bases.filter(b => b.owner === currentPlayer);
+    const myBases = bases.filter(b => b.owner === 1);
     
     let count = 0;
     for (let i = 0; i < myBases.length && i < 50; i++) {
@@ -96,7 +95,7 @@ export function updateFogOfWar() {
     fogMat.uniforms.uCount.value = count;
 
     bases.forEach(base => {
-        if (base.owner === currentPlayer) {
+        if (base.owner === 1) {
             base.mesh.visible = true;
             if (base.lineMesh) base.lineMesh.visible = true;
             if (base.domeMesh) base.domeMesh.visible = true;
@@ -121,6 +120,17 @@ export function updateFogOfWar() {
 }
 
 function setupEventListeners() {
+    // ВРАЩЕНИЕ КАМЕРЫ НА A / D
+    window.addEventListener('keydown', (e) => {
+        if (isAITurn || gameOver || !selectedBase) return;
+        const key = e.key.toLowerCase();
+        if (key === 'a' || key === 'ф') {
+            rotateCameraAroundTarget(-Math.PI / 18); // 10 градусов
+        } else if (key === 'd' || key === 'в') {
+            rotateCameraAroundTarget(Math.PI / 18);
+        }
+    });
+
     uiElements.spinBtn.addEventListener('click', () => {
         if (hasSpunThisTurn || gameOver || isAITurn) return;
         spinEnergy();
@@ -190,7 +200,7 @@ function setupEventListeners() {
                     (genCount) => alert(`Генератор! Твоя выработка: от ${5 + genCount} до ${8 + genCount}`),
                     (owner) => endGame(owner),
                     () => updateFogOfWar(),
-                    currentPlayer,
+                    1, 
                     VISION_RADIUS
                 );
             } else if (power > 0) {
@@ -211,6 +221,15 @@ function setupEventListeners() {
         uiElements.startScreen.style.display = 'none';
         startGame();
     });
+}
+
+function rotateCameraAroundTarget(angle) {
+    if (!selectedBase) return;
+    const target = selectedBase.position;
+    const offset = camera.position.clone().sub(target);
+    offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+    camera.position.copy(target).add(offset);
+    controls.update();
 }
 
 function getModuleCost(type) {
