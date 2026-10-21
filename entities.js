@@ -92,10 +92,19 @@ export function createNewBase(scene, bases, pos, parentBase, moduleType, angle, 
     layFlatOnSphere(newBase, pos);
     scene.add(newBase);
     
+    // НЕВИДИМАЯ ЗОНА КЛИКА (радиус 0.4)
+    const hitArea = new THREE.Mesh(
+        new THREE.SphereGeometry(0.4, 8, 8), 
+        new THREE.MeshBasicMaterial({ visible: false })
+    );
+    hitArea.position.copy(pos);
+    scene.add(hitArea);
+
     const lineData = createEnergyLine(scene, parentBase.position, pos, parentBase.owner);
 
     const baseObj = { 
         mesh: newBase, 
+        hitArea: hitArea,
         position: pos.clone(), 
         owner: parentBase.owner, 
         hp: 100, 
@@ -138,6 +147,7 @@ export function destroyBaseAndChain(scene, bases, base, onGameOver) {
     children.forEach(child => destroyBaseAndChain(scene, bases, child, onGameOver));
 
     scene.remove(base.mesh);
+    if (base.hitArea) scene.remove(base.hitArea);
     if (base.lineMesh) scene.remove(base.lineMesh);
     if (base.domeMesh) scene.remove(base.domeMesh); 
     if (base.healthSprite) scene.remove(base.healthSprite); 
