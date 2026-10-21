@@ -62,7 +62,7 @@ function centerCameraOnBase(base) {
                          
     camera.position.copy(base.position).add(offset);
     controls.target.copy(base.position);
-    camera.up.copy(normal); 
+    // УБРАНА СТРОЧКА camera.up.copy(normal); ИЗ-ЗА КОТОРОЙ ЛОМАЛСЯ КЛИК
     controls.update();
 }
 
@@ -399,7 +399,6 @@ function startGame() {
         layFlatOnSphere(hub, pos);
         scene.add(hub);
         
-        // НЕВИДИМАЯ ЗОНА КЛИКА ДЛЯ ГЛАВНОЙ БАЗЫ
         const hitArea = new THREE.Mesh(
             new THREE.SphereGeometry(0.4, 8, 8), 
             new THREE.MeshBasicMaterial({ visible: false })
@@ -487,7 +486,14 @@ function updateArrowDirection() {
     const normal = selectedBase.position.clone().normalize();
     let baseVector = new THREE.Vector3(1, 0, 0);
     if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
+    
     let tangent = baseVector.cross(normal).normalize();
+    // ЗАЩИТА ОТ НУЛЕВОГО ВЕКТОРА
+    if (tangent.lengthSq() < 0.1) {
+        baseVector.set(0, 0, 1);
+        tangent = baseVector.cross(normal).normalize();
+    }
+    
     tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(currentAngle));
     arrowHelper.setDirection(tangent);
 }
