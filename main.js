@@ -11,7 +11,6 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x1a1a2e, 1);
 document.body.appendChild(renderer.domElement);
 
-// Свет
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); 
 scene.add(ambientLight);
 const dirLight = new THREE.DirectionalLight(0xffffff, 1); 
