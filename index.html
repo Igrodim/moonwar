@@ -18,11 +18,12 @@
 
         #energy-wheel-container { display: flex; flex-direction: column; align-items: center; width: 150px; }
         #spin-btn {
-            background: #ffaa00; color: black; font-weight: bold; font-size: 18px;
+            background: #ffaa00; color: black; font-weight: bold; font-size: 32px; /* Шрифт больше для молнии */
             padding: 15px; border-radius: 50%; width: 80px; height: 80px; border: 3px solid #fff; cursor: pointer; transition: transform 0.1s;
+            display: flex; justify-content: center; align-items: center;
         }
         #spin-btn:active { transform: scale(0.95); }
-        #spin-btn:disabled { background: #555; cursor: not-allowed; border-color: #333; }
+        #spin-btn:disabled { background: #555; cursor: not-allowed; border-color: #333; color: #888; }
 
         #modules-container { display: flex; gap: 20px; flex-grow: 1; justify-content: center; }
         .tab-group { display: flex; flex-direction: column; background: #222; border: 1px solid #4a4a6a; border-radius: 8px; }
@@ -47,7 +48,6 @@
         #power-bar { width: 0%; height: 100%; background: #ffaa00; }
         #fire-btn { background: #aa00aa !important; font-weight: bold; width: 100%; margin-top: 5px; }
 
-        /* Стартовый экран */
         #start-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: #1a1a2e; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -66,11 +66,10 @@
 </head>
 <body>
 
-    <!-- Стартовый экран -->
     <div id="start-screen">
         <h1>MoonWar 3D</h1>
-        <label>Количество противников (ИИ) от 1 до 7:</label>
-        <input type="number" id="ai-count" value="1" min="1" max="7">
+        <label>Количество противников (ИИ) от 1 до 31:</label>
+        <input type="number" id="ai-count" value="1" min="1" max="31">
         <button id="start-btn">НАЧАТЬ ИГРУ</button>
     </div>
 
@@ -91,7 +90,7 @@
 
     <div id="bottom-panel">
         <div id="energy-wheel-container">
-            <button id="spin-btn">КРУТИТЬ</button>
+            <button id="spin-btn">⚡</button>
         </div>
 
         <div id="modules-container">
