@@ -20,19 +20,14 @@ scene.add(dirLight);
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
-controls.enablePan = true;      // ВКЛЮЧАЕМ ПАНОРАМИРОВАНИЕ (ПКМ)
-controls.screenSpacePanning = true; // Движение параллельно экрану
-controls.enableRotate = false;  // Вращение только на A/D
+
+// ОТКЛЮЧАЕМ СТАНДАРТНОЕ ПАНОРАМИРОВАНИЕ И ВРАЩЕНИЕ
+controls.enablePan = false; 
+controls.enableRotate = false; 
+
 controls.zoomSpeed = 1.2;
 controls.minDistance = 1.5; 
 controls.maxDistance = 25; 
-
-// Настраиваем кнопки мыши: ЛКМ (0) ничего не делает, ПКМ (2) - панорамирует
-controls.mouseButtons = {
-    LEFT: null,
-    MIDDLE: THREE.MOUSE.DOLLY,
-    RIGHT: THREE.MOUSE.PAN
-};
 
 createPlanet(scene);
 initGame(scene, camera, controls);
@@ -47,13 +42,7 @@ function animate() {
     requestAnimationFrame(animate);
     
     controls.update();       
-    
-    // ОГРАНИЧЕНИЕ: камера всегда смотрит на поверхность планеты (радиус 10)
-    if (controls.target.length() > 0) {
-        controls.target.setLength(10); 
-    }
-
-    updateCameraTilt();      // Применяем плавный наклон
+    updateCameraTilt();      
     
     renderer.render(scene, camera);
 }
