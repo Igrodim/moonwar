@@ -28,13 +28,10 @@
         #spin-btn:active { transform: scale(0.95); }
         #spin-btn:disabled { background: #555; cursor: not-allowed; border-color: #333; color: #888; }
 
-        /* Новые кнопки камеры */
-        .camera-controls {
-            display: flex; gap: 10px; margin-left: 10px;
-        }
+        .camera-controls { display: flex; gap: 10px; margin-left: 10px; }
         .camera-controls button {
-            background: #333; color: white; border: 1px solid #666; padding: 15px;
-            border-radius: 8px; cursor: pointer; font-size: 24px; font-weight: bold;
+            background: #333; color: white; border: 1px solid #666; padding: 15px 20px;
+            border-radius: 8px; cursor: pointer; font-size: 20px; font-weight: bold;
         }
         .camera-controls button:hover { background: #555; }
         .camera-controls button:active { background: #2a4a2a; }
@@ -106,8 +103,8 @@
         <div id="energy-wheel-container">
             <button id="spin-btn">⚡</button>
             <div class="camera-controls">
-                <button id="rotate-left" title="Повернуть камеру влево (A)">◀</button>
-                <button id="rotate-right" title="Повернуть камеру вправо (D)">▶</button>
+                <button id="rotate-left" title="Повернуть камеру влево (A)">A</button>
+                <button id="rotate-right" title="Повернуть камеру вправо (D)">D</button>
             </div>
         </div>
 
