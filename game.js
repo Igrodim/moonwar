@@ -26,9 +26,10 @@ let isShooting = false;
 let currentCameraAzimuth = 0; 
 let fogMat;
 
-// ДЛЯ ПАНОРАМИРОВАНИЯ
-let isPanning = false;
-let panMouse = { x: 0, y: 0 };
+// ФЛАГИ ДЛЯ ПЛАВНОГО ВРАЩЕНИЯ
+let isRotatingLeft = false;
+let isRotatingRight = false;
+const ROTATION_SPEED = 0.02; // Скорость поворота за кадр
 
 let camAnim = { active: false, t: 0, startPos: new THREE.Vector3(), endPos: new THREE.Vector3(), startTarget: new THREE.Vector3(), endTarget: new THREE.Vector3(), startUp: new THREE.Vector3(), endUp: new THREE.Vector3() };
 
@@ -48,7 +49,7 @@ export function initGame(_scene, _camera, _controls) {
 }
 
 export function updateCameraTilt() {
-    if (isPanning) return; // Не меняем наклон во время полета
+    // 1. АНИМАЦИЯ ПЕРЕЛЕТА (если выбрана новая база)
     if (camAnim.active) {
         camAnim.t += 0.04; 
         if (camAnim.t >= 1) { camAnim.t = 1; camAnim.active = false; }
@@ -63,7 +64,23 @@ export function updateCameraTilt() {
     }
 
     if (!selectedBase || isAITurn || isShooting) return;
-    
+
+    // 2. ПЛАВНОЕ ВРАЩЕНИЕ A/D
+    if (isRotatingLeft || isRotatingRight) {
+        const target = selectedBase.position;
+        const normal = target.clone().normalize();
+        const step = isRotatingLeft ? ROTATION_SPEED : -ROTATION_SPEED;
+
+        currentCameraAzimuth += step;
+
+        const offset = camera.position.clone().sub(target);
+        offset.applyAxisAngle(normal, step);
+        camera.position.copy(target).add(offset);
+        camera.up.applyAxisAngle(normal, step);
+        controls.update();
+    }
+
+    // 3. ПЛАВНЫЙ НАКЛОН ПРИ ЗУМЕ
     const target = controls.target; 
     const normal = target.clone().normalize();
     const dist = camera.position.distanceTo(target);
@@ -185,65 +202,37 @@ export function updateFogOfWar() {
 }
 
 function setupEventListeners() {
-    // СПУТНИКОВОЕ ПАНОРАМИРОВАНИЕ НА ПКМ
-    window.addEventListener('pointerdown', (e) => {
-        if (e.button === 2) {
-            isPanning = true;
-            panMouse.x = e.clientX;
-            panMouse.y = e.clientY;
-        }
-    });
-
-    window.addEventListener('pointermove', (e) => {
-        if (isPanning && !isAITurn && !gameOver && !isShooting) {
-            const dx = e.clientX - panMouse.x;
-            const dy = e.clientY - panMouse.y;
-            panMouse.x = e.clientX;
-            panMouse.y = e.clientY;
-            
-            const target = controls.target;
-            const normal = target.clone().normalize();
-            
-            let up = new THREE.Vector3(0, 1, 0);
-            let tangentX = new THREE.Vector3().crossVectors(normal, up).normalize();
-            if (tangentX.lengthSq() < 0.01) tangentX.set(1, 0, 0).cross(normal).normalize();
-            let tangentY = new THREE.Vector3().crossVectors(normal, tangentX).normalize();
-            
-            const dist = camera.position.distanceTo(target);
-            const speed = dist * 0.0005;
-            
-            const moveVec = tangentX.multiplyScalar(-dx * speed).add(tangentY.multiplyScalar(dy * speed));
-            
-            camera.position.add(moveVec);
-            target.add(moveVec);
-            target.setLength(10); // Держим фокус на поверхности
-            
-            controls.update();
-        }
-    });
-
-    window.addEventListener('pointerup', (e) => {
-        if (e.button === 2) {
-            isPanning = false;
-        }
-    });
-
+    // КЛАВИАТУРА (УСТАНАВЛИВАЕМ ФЛАГИ)
     window.addEventListener('keydown', (e) => {
-        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning) return;
+        if (isAITurn || gameOver || !selectedBase || isShooting) return;
+        if (e.repeat) return;
         const key = e.key.toLowerCase();
-        if (key === 'a' || key === 'ф') rotateCameraAroundTarget(-Math.PI / 16); 
-        else if (key === 'd' || key === 'в') rotateCameraAroundTarget(Math.PI / 16);
+        if (key === 'a' || key === 'ф') isRotatingLeft = true; 
+        else if (key === 'd' || key === 'в') isRotatingRight = true;
     });
 
-    uiElements.rotateLeft.addEventListener('click', () => {
-        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning) return;
-        rotateCameraAroundTarget(-Math.PI / 16);
-    });
-    uiElements.rotateRight.addEventListener('click', () => {
-        if (isAITurn || gameOver || !selectedBase || isShooting || isPanning) return;
-        rotateCameraAroundTarget(Math.PI / 16);
+    window.addEventListener('keyup', (e) => {
+        const key = e.key.toLowerCase();
+        if (key === 'a' || key === 'ф') isRotatingLeft = false;
+        if (key === 'd' || key === 'в') isRotatingRight = false;
     });
 
+    // КНОПКИ UI (УСТАНАВЛИВАЕМ ФЛАГИ)
+    uiElements.rotateLeft.addEventListener('pointerdown', () => {
+        if (isAITurn || gameOver || !selectedBase || isShooting) return;
+        isRotatingLeft = true;
+    });
+    uiElements.rotateLeft.addEventListener('pointerup', () => isRotatingLeft = false);
+    uiElements.rotateLeft.addEventListener('pointerleave', () => isRotatingLeft = false);
+
+    uiElements.rotateRight.addEventListener('pointerdown', () => {
+        if (isAITurn || gameOver || !selectedBase || isShooting) return;
+        isRotatingRight = true;
+    });
+    uiElements.rotateRight.addEventListener('pointerup', () => isRotatingRight = false);
+    uiElements.rotateRight.addEventListener('pointerleave', () => isRotatingRight = false);
+
+    // ОСТАЛЬНОЙ ИНТЕРФЕЙС
     uiElements.spinBtn.addEventListener('click', () => {
         if (hasSpunThisTurn || gameOver || isAITurn || isShooting) return;
         spinEnergy();
@@ -267,24 +256,9 @@ function setupEventListeners() {
         endTurn();
     });
 
-    uiElements.btnLeft.addEventListener('click', () => { 
-        if (selectedBase && !isAITurn && !isShooting && !isPanning) { 
-            currentAngle += (360 / 128); 
-            selectedBase.aimAngle = currentAngle;
-            updateArrowDirection(); 
-        } 
-    });
-    uiElements.btnRight.addEventListener('click', () => { 
-        if (selectedBase && !isAITurn && !isShooting && !isPanning) { 
-            currentAngle -= (360 / 128); 
-            selectedBase.aimAngle = currentAngle;
-            updateArrowDirection(); 
-        } 
-    });
-
     uiElements.fireBtn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
-        if (!selectedBase || gameOver || isAITurn || isShooting || isPanning) return;
+        if (!selectedBase || gameOver || isAITurn || isShooting) return;
         
         if (!selectedModuleType) { alert("Сначала выберите модуль внизу!"); return; }
 
@@ -351,24 +325,6 @@ function setupEventListeners() {
         uiElements.startScreen.style.display = 'none';
         startGame();
     });
-}
-
-function rotateCameraAroundTarget(angle) {
-    if (!selectedBase || isShooting) return;
-    currentCameraAzimuth += angle; 
-    const target = selectedBase.position;
-    const normal = target.clone().normalize();
-    
-    const offset = camera.position.clone().sub(target);
-    offset.applyAxisAngle(normal, angle);
-    camera.position.copy(target).add(offset);
-    
-    if (controls.target.distanceTo(target) < 1.5) {
-        controls.target.copy(target); 
-    }
-    
-    camera.up.applyAxisAngle(normal, angle);
-    controls.update();
 }
 
 function getModuleCost(type) {
@@ -499,12 +455,12 @@ function setupRaycaster() {
     const mouse = new THREE.Vector2();
 
     window.addEventListener('pointerdown', (event) => {
-        if (event.button !== 0) return; // Только ЛКМ
-        if (isAITurn || gameOver || isShooting || camAnim.active || isPanning) return;
+        if (event.button !== 0) return; 
+        if (isAITurn || gameOver || isShooting || camAnim.active) return;
         if (event.target.closest('#bottom-panel') || event.target.closest('#ui-panel') || event.target.closest('#start-screen')) return;
 
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-        mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        mouse.y = (event.clientY / window.innerHeight) * 2 + 1;
 
         raycaster.setFromCamera(mouse, camera);
         const baseMeshes = bases.filter(b => b.mesh.visible).map(b => b.mesh);
