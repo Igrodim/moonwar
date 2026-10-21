@@ -6,7 +6,7 @@ export function canShoot(bases, startBase, angle, moduleToBuild) {
     let sector = Math.round(snappedAngle / ANGLE_STEP) % 16;
     if (sector < 0) sector += 16; 
 
-    const isBuildingModule = ['relay', 'dome', 'generator', 'aao'].includes(moduleToBuild);
+    const isBuildingModule = ['relay', 'dome', 'generator', 'aao', 'drone'].includes(moduleToBuild);
     if (isBuildingModule) {
         const existingBuild = bases.find(b => b.parent === startBase && b.sector === sector);
         if (existingBuild) return { allowed: false, reason: "В этом направлении уже построен модуль!" };
@@ -70,13 +70,30 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
     animateFlight();
 }
 
+export function checkLineIntersection(bases, startPos, endPos) {
+    const midPoint = startPos.clone().lerp(endPos, 0.5);
+    const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + 0.3);
+    const newCurve = new THREE.QuadraticBezierCurve3(startPos, controlPoint, endPos);
+    const newPoints = newCurve.getPoints(15);
+
+    for (let b of bases) {
+        if (!b.parent || !b.curve) continue; 
+        const existingPoints = b.curve.getPoints(15);
+        for (let p1 of newPoints) {
+            for (let p2 of existingPoints) {
+                if (p1.distanceTo(p2) < 0.12) return true;
+            }
+        }
+    }
+    return false;
+}
+
 function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver) {
     let domeInRange = bases.find(b => b.type === 'dome' && b.owner !== parentBase.owner && b.position.distanceTo(targetPos) < 0.35);
 
     if (domeInRange && !domeInRange.isDisabled) {
         if (moduleToBuild === 'bomb') domeInRange.shieldHits += 1;
         if (moduleToBuild === 'homing') domeInRange.shieldHits += 2;
-
         if (domeInRange.shieldHits >= 2) {
             domeInRange.isDisabled = true;
             if (domeInRange.domeMesh) domeInRange.domeMesh.visible = false;
@@ -87,14 +104,18 @@ function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, secto
 
     if (moduleToBuild === 'bomb') { explode(scene, bases, targetPos, 25, 0.10, null, onGameOver); return; }
     if (moduleToBuild === 'homing') { explode(scene, bases, targetPos, 50, 0.20, null, onGameOver); return; }
-    if (moduleToBuild === 'drone') { return; }
+
+    if (checkLineIntersection(bases, parentBase.position, targetPos)) {
+        explode(scene, bases, targetPos, 25, 0.30, null, onGameOver); 
+        return;
+    }
 
     let collision = false;
     for (let b of bases) {
         if (b === parentBase) continue; 
         if (b.position.distanceTo(targetPos) < 0.15) {
             collision = true;
-            explode(scene, bases, targetPos, 25, 0.10, null, onGameOver);
+            explode(scene, bases, targetPos, 25, 0.30, null, onGameOver);
             b.hp -= 25; 
             if (b.hp <= 0) destroyBaseAndChain(scene, bases, b, onGameOver);
             break;
@@ -132,10 +153,42 @@ export function explode(scene, bases, pos, damage, radius, owner, onGameOver) {
     for (let b of basesCopy) {
         if (b.position.distanceTo(explosionCenter) < radius) { 
             b.hp -= damage;
-            if (b.owner === 1) alert(`Попадание! Урон: ${damage}. HP базы: ${b.hp}`);
-            if (b.hp <= 0) {
-                destroyBaseAndChain(scene, bases, b, onGameOver);
-            }
+            showDamageText(scene, b.position, damage);
+            if (b.hp <= 0) destroyBaseAndChain(scene, bases, b, onGameOver);
         }
     }
+}
+
+function showDamageText(scene, position, damage) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 64;
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#ff0000'; 
+    context.font = 'bold 40px Arial';
+    context.textAlign = 'center';
+    context.fillText(`-${damage}`, 64, 40);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+    const sprite = new THREE.Sprite(material);
+    
+    const normal = position.clone().normalize();
+    sprite.position.copy(position).add(normal.multiplyScalar(0.3));
+    
+    sprite.scale.set(0.5, 0.25, 1);
+    scene.add(sprite);
+
+    let life = 1;
+    const animateText = () => {
+        if (life <= 0) {
+            scene.remove(sprite);
+            return;
+        }
+        life -= 0.02;
+        sprite.position.add(normal.clone().multiplyScalar(0.01)); 
+        sprite.material.opacity = life;
+        requestAnimationFrame(animateText);
+    };
+    animateText();
 }
