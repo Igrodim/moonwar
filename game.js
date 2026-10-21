@@ -120,12 +120,11 @@ export function updateFogOfWar() {
 }
 
 function setupEventListeners() {
-    // ВРАЩЕНИЕ КАМЕРЫ НА A / D
     window.addEventListener('keydown', (e) => {
         if (isAITurn || gameOver || !selectedBase) return;
         const key = e.key.toLowerCase();
         if (key === 'a' || key === 'ф') {
-            rotateCameraAroundTarget(-Math.PI / 18); // 10 градусов
+            rotateCameraAroundTarget(-Math.PI / 18); 
         } else if (key === 'd' || key === 'в') {
             rotateCameraAroundTarget(Math.PI / 18);
         }
@@ -226,14 +225,22 @@ function setupEventListeners() {
 function rotateCameraAroundTarget(angle) {
     if (!selectedBase) return;
     const target = selectedBase.position;
-    // Ось вращения - нормаль планеты в точке базы
+    
+    // Вектор от центра планеты к базе (нормаль поверхности)
     const normal = target.clone().normalize(); 
+    
+    // Вектор от базы к камере
     const offset = camera.position.clone().sub(target);
 
-    // Вращаем вектор смещения камеры вокруг нормали
+    // Вращаем камеру вокруг базы по касательной (вокруг нормали)
     offset.applyAxisAngle(normal, angle);
 
+    // Обновляем позицию камеры
     camera.position.copy(target).add(offset);
+    
+    // Обновляем "верх" камеры, чтобы она не кувыркалась и смотрела на базу сверху
+    camera.up.copy(normal); 
+    
     controls.update();
 }
 
@@ -306,7 +313,6 @@ function endTurn() {
         isAITurn = false;
         uiElements.bottomPanel.style.pointerEvents = 'auto';
         uiElements.bottomPanel.style.opacity = '1';
-        // УДАЛЕН БЛОК ПРИНУДИТЕЛЬНОГО ВОЗВРАТА КАМЕРЫ
     }
 }
 
@@ -344,6 +350,7 @@ function startGame() {
         if (p === 1) {
             camera.position.copy(pos.clone().normalize().multiplyScalar(PLANET_RADIUS + 10));
             controls.target.copy(pos);
+            camera.up.copy(pos.clone().normalize()); // Ставим верх камеры правильно
             controls.update();
             selectedBase = baseObj;
             uiElements.uiPanel.style.display = 'block';
@@ -394,6 +401,9 @@ function setupRaycaster() {
 
             selectedBase = clickedBase;
             controls.target.copy(selectedBase.position);
+            camera.up.copy(selectedBase.position.clone().normalize()); // Обновляем верх камеры
+            controls.update();
+            
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(selectedBase.position);
             currentAngle = 0;
