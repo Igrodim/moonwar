@@ -92,10 +92,10 @@ export function createNewBase(scene, bases, pos, parentBase, moduleType, angle, 
     layFlatOnSphere(newBase, pos);
     scene.add(newBase);
     
-    // НЕВИДИМАЯ ЗОНА КЛИКА (радиус 0.4)
+    // ИСПРАВЛЕНО: transparent+opacity вместо visible:false, чтобы Raycaster ловил клик
     const hitArea = new THREE.Mesh(
         new THREE.SphereGeometry(0.4, 8, 8), 
-        new THREE.MeshBasicMaterial({ visible: false })
+        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false })
     );
     hitArea.position.copy(pos);
     scene.add(hitArea);
