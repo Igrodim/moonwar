@@ -35,8 +35,13 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
 
     const startTime = performance.now();
     const duration = 1000;
+    
+    // ЕДИНАЯ КРИВАЯ ДЛЯ ВИЗУАЛА И КОЛЛИЗИЙ
     const travelDistance = startBase.position.distanceTo(targetPos);
     const maxHeight = Math.min(travelDistance * 0.2, 0.4);
+    const midPoint = startBase.position.clone().lerp(targetPos, 0.5);
+    const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + maxHeight);
+    const flightCurve = new THREE.QuadraticBezierCurve3(startBase.position, controlPoint, targetPos);
 
     function animateFlight() {
         const elapsed = performance.now() - startTime;
@@ -69,10 +74,8 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
                 }
             }
 
-            const surfacePoint = new THREE.Vector3().copy(startBase.position).lerp(targetPos, t).normalize().multiplyScalar(PLANET_RADIUS);
-            const heightOffset = Math.sin(t * Math.PI) * maxHeight;
-            const norm = surfacePoint.clone().normalize();
-            projectile.position.copy(surfacePoint).add(norm.multiplyScalar(heightOffset));
+            // Движение по кривой Безье
+            projectile.position.copy(flightCurve.getPoint(t));
             requestAnimationFrame(animateFlight);
         } else {
             scene.remove(projectile);
@@ -119,7 +122,6 @@ function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, secto
         return; 
     }
 
-    // УВЕЛИЧЕННЫЕ РАДИУСЫ
     if (moduleToBuild === 'bomb') { explode(scene, bases, targetPos, 25, 0.20, null, onGameOver); return; }
     if (moduleToBuild === 'homing') { explode(scene, bases, targetPos, 50, 0.30, null, onGameOver); return; }
 
@@ -155,16 +157,27 @@ export function explode(scene, bases, pos, damage, radius, owner, onGameOver) {
     explosion.position.copy(explosionCenter);
     scene.add(explosion);
 
-    let scale = 1;
-    const interval = setInterval(() => {
-        scale += 0.1;
-        explosion.scale.set(scale, scale, scale);
-        explosionMat.opacity -= 0.05;
-        if (explosionMat.opacity <= 0) {
-            clearInterval(interval);
+    // ОПТИМИЗИРОВАННЫЙ ВЗРЫВ БЕЗ SETINTERVAL
+    const startTime = performance.now();
+    const duration = 600;
+
+    function animateExplosion() {
+        const elapsed = performance.now() - startTime;
+        const t = elapsed / duration;
+
+        if (t >= 1) {
             scene.remove(explosion);
+            explosionGeo.dispose();
+            explosionMat.dispose();
+            return;
         }
-    }, 30);
+
+        const scale = 1 + t * 3;
+        explosion.scale.set(scale, scale, scale);
+        explosionMat.opacity = 1 - t;
+        requestAnimationFrame(animateExplosion);
+    }
+    animateExplosion();
 
     if (damage === 0) return; 
 
@@ -172,7 +185,7 @@ export function explode(scene, bases, pos, damage, radius, owner, onGameOver) {
     for (let b of basesCopy) {
         if (b.position.distanceTo(explosionCenter) < radius) { 
             b.hp -= damage;
-            updateHealthBar(b); // ОБНОВЛЯЕМ ЗДОРОВЬЕ
+            updateHealthBar(b);
             showDamageText(scene, b.position, damage);
             if (b.hp <= 0) destroyBaseAndChain(scene, bases, b, onGameOver);
         }
@@ -203,6 +216,9 @@ function showDamageText(scene, position, damage) {
     const animateText = () => {
         if (life <= 0) {
             scene.remove(sprite);
+            // ОЧИСТКА ПАМЯТИ ТЕКСТУРЫ И МАТЕРИАЛА
+            texture.dispose();
+            material.dispose();
             return;
         }
         life -= 0.02;
