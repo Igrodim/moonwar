@@ -37,41 +37,55 @@ export function initGame(_scene, _camera, _controls) {
     setupEventListeners();
 }
 
-// ФУНКЦИЯ ПЛАВНОГО ИЗМЕНЕНИЯ УГЛА
+// ПЛАВНОЕ ИЗМЕНЕНИЕ УГЛА (Математика)
 export function updateCameraTilt() {
     if (!selectedBase || isAITurn) return;
     
-    const dist = camera.position.distanceTo(controls.target);
-    const minDist = 1.5;  // Ближняя дистанция
-    const maxDist = 20;   // Дальняя дистанция
-
+    const target = selectedBase.position;
+    const normal = target.clone().normalize();
+    const dist = camera.position.distanceTo(target);
+    
+    const minDist = 1.5;  // Ближняя дистанция (наклон 25 градусов от нормали = 65 к поверхности)
+    const maxDist = 20;   // Дальняя дистанция (почти 90 к поверхности)
+    
     let t = (dist - minDist) / (maxDist - minDist);
     t = Math.max(0, Math.min(1, t));
-
-    // От 2 градусов (почти 90 к поверхности) вдали до 25 градусов (65 к поверхности) вблизи
-    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t));
-
-    // Ограничиваем полярный угол. Зазор 0.005 нужен, чтобы OrbitControls не блокировал вращение A/D
-    if (Math.abs(controls.minPolarAngle - targetPhi) > 0.001) {
-        controls.minPolarAngle = targetPhi - 0.005;
-        controls.maxPolarAngle = targetPhi + 0.005;
+    
+    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t)); // От 2 до 25 градусов от нормали
+    
+    const offset = camera.position.clone().sub(target);
+    const currentPhi = offset.angleTo(normal);
+    
+    // Если угол не совпадает, плавно поворачиваем камеру
+    if (Math.abs(currentPhi - targetPhi) > 0.005) {
+        // Ось вращения - перпендикуляр между текущим положением и нормалью
+        const axis = new THREE.Vector3().crossVectors(offset, normal).normalize();
+        if (axis.lengthSq() > 0.001) {
+            // Плавно интерполируем позицию
+            offset.applyAxisAngle(axis, (currentPhi - targetPhi) * 0.1);
+            camera.position.copy(target).add(offset);
+        }
     }
 }
 
 // ИНИЦИАЛИЗАЦИЯ КАМЕРЫ ПРИ ВЫБОРЕ БАЗЫ
 function centerCameraOnBase(base) {
     const normal = base.position.clone().normalize();
+    camera.up.copy(normal); // Верх камеры смотрит от центра планеты
     
-    // Привязываем верх камеры к нормали базы
-    camera.up.copy(normal);
+    // Задаем начальный наклон 2 градуса (вид почти сверху)
+    let tangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
+    if (tangent.lengthSq() < 0.1) tangent.set(0, 0, 1).cross(normal).normalize();
     
-    // Ставим камеру на 20 единиц (вид почти 90 градусов)
-    camera.position.copy(base.position).add(normal.clone().multiplyScalar(20));
+    const initialPhi = THREE.MathUtils.degToRad(2);
+    const dist = 20;
+    
+    const offset = normal.clone().multiplyScalar(Math.cos(initialPhi) * dist)
+                         .add(tangent.clone().multiplyScalar(Math.sin(initialPhi) * dist));
+                         
+    camera.position.copy(base.position).add(offset);
     controls.target.copy(base.position);
     
-    controls.minPolarAngle = THREE.MathUtils.degToRad(2);
-    controls.maxPolarAngle = THREE.MathUtils.degToRad(2);
-
     controls.update();
 }
 
@@ -269,15 +283,20 @@ function setupEventListeners() {
     });
 }
 
-// ИСПРАВЛЕННАЯ ФУНКЦИЯ ВРАЩЕНИЯ
+// ЧИСТАЯ МАТЕМАТИКА ДЛЯ ВРАЩЕНИЯ
 function rotateCameraAroundTarget(angle) {
     if (!selectedBase) return;
     
-    // Временно включаем вращение для OrbitControls, чтобы он использовал camera.up как ось
-    const wasEnabled = controls.enableRotate;
-    controls.enableRotate = true;
-    controls.rotateLeft(angle);
-    controls.enableRotate = wasEnabled;
+    const target = selectedBase.position;
+    const normal = target.clone().normalize();
+
+    // Вращаем позицию камеры вокруг нормали базы
+    const offset = camera.position.clone().sub(target);
+    offset.applyAxisAngle(normal, angle);
+    camera.position.copy(target).add(offset);
+
+    // Вращаем "верх" камеры, чтобы горизонт оставался ровным
+    camera.up.applyAxisAngle(normal, angle);
     
     controls.update();
 }
