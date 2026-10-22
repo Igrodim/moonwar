@@ -36,6 +36,7 @@
         #spin-btn:hover:not(:disabled) { background: rgba(0, 170, 255, 0.2); }
         #spin-btn:disabled { background: #222; cursor: not-allowed; border-color: #444; color: #555; animation: none; box-shadow: none; }
 
+        /* Кнопки управления камерой (W, S, A, D) */
         .camera-controls { display: flex; gap: 10px; margin-left: 10px; }
         .camera-controls button {
             background: #1a1a2e; color: #00aaff; border: 1px solid #00aaff; padding: 15px 20px;
@@ -43,6 +44,9 @@
             transition: all 0.2s;
         }
         .camera-controls button:hover { background: rgba(0, 170, 255, 0.2); box-shadow: 0 0 15px #00aaff; }
+        /* Выделяем кнопки переключения баз визуально, чтобы не путать с поворотом */
+        .camera-controls button.base-btn { color: #88aaff; border-color: #4a4a6a; padding: 15px 15px; }
+        .camera-controls button.base-btn:hover { border-color: #00aaff; color: #00aaff; }
 
         #modules-container { display: flex; gap: 20px; flex-grow: 1; justify-content: center; }
         .tab-group { display: flex; flex-direction: column; background: #111; border: 1px solid #4a4a6a; border-radius: 8px; overflow: hidden; }
@@ -74,10 +78,6 @@
             cursor: pointer; margin: 0 5px; border-radius: 5px; font-family: 'Orbitron', sans-serif; transition: all 0.2s;
         }
         #ui-panel button:hover { background: rgba(0, 170, 255, 0.2); }
-
-        .base-cycle-controls { display: flex; justify-content: center; gap: 10px; margin-bottom: 10px; }
-        .base-cycle-controls button { background: transparent; color: #aaa; border: 1px solid #4a4a6a; }
-        .base-cycle-controls button:hover { border-color: #00aaff; color: #00aaff; }
 
         #power-bar-container { width: 200px; height: 15px; background: #111; border: 1px solid #00aaff; margin: 10px auto; border-radius: 10px; overflow: hidden; }
         #power-bar { width: 0%; height: 100%; background: #00aaff; box-shadow: 0 0 10px #00aaff; }
@@ -278,10 +278,6 @@
     </div>
 
     <div id="ui-panel">
-        <div class="base-cycle-controls">
-            <button id="cycle-prev" title="Предыдущая база (W)">▲ W</button>
-            <button id="cycle-next" title="Следующая база (S)">▼ S</button>
-        </div>
         <div>
             <button id="turn-left">◀</button>
             <span style="font-size: 14px; margin: 0 10px; color: #aaa;">НАПРАВЛЕНИЕ</span>
@@ -295,6 +291,10 @@
         <div id="energy-wheel-container">
             <button id="spin-btn" class="pulse">⚡</button>
             <div class="camera-controls">
+                <!-- W и S для переключения баз -->
+                <button id="cycle-prev" class="base-btn" title="Предыдущая база (W)">W</button>
+                <button id="cycle-next" class="base-btn" title="Следующая база (S)">S</button>
+                <!-- A и D для поворота -->
                 <button id="rotate-left" title="Повернуть камеру влево (A)">A</button>
                 <button id="rotate-right" title="Повернуть камеру вправо (D)">D</button>
             </div>
@@ -360,7 +360,6 @@
             input.value = val;
         }
 
-        // Глобальные функции для всплывающего окна
         window.showMessage = function(title, text) {
             const overlay = document.getElementById('custom-modal-overlay');
             document.getElementById('custom-modal-title').innerText = title;
