@@ -6,62 +6,12 @@ export function canShoot(bases, startBase, angle, moduleToBuild) {
     let sector = Math.round(snappedAngle / ANGLE_STEP) % 16;
     if (sector < 0) sector += 16; 
 
-    // 1. Проверка на занятый сектор (для строительных модулей)
-    const isBuildingModule = ['relay', 'dome', 'generator', 'aao'].includes(moduleToBuild);
+    const isBuildingModule = ['relay', 'dome', 'generator', 'aao', 'drone'].includes(moduleToBuild);
     if (isBuildingModule) {
         const existingBuild = bases.find(b => b.parent === startBase && b.sector === sector);
         if (existingBuild) return { allowed: false, reason: "В этом направлении уже построен модуль!" };
     }
-
-    // 2. Проверка на пересечение линий (только для строительных модулей, т.к. бомбы летят по воздуху)
-    // Но мы сделаем проверку для всех, чтобы новые линии не пересекались.
-    if (isBuildingModule) {
-        const distance = powerValueToDistance(startBase, snappedAngle, 10); // max power для проверки
-        const targetPos = startBase.position.clone().add(getTangent(startBase.position, snappedAngle).multiplyScalar(distance)).normalize().multiplyScalar(PLANET_RADIUS);
-        
-        // Проверяем расстояние до всех существующих линий
-        for (let b of bases) {
-            if (!b.parent) continue; // У главного хаба нет входящей линии
-            
-            // Получаем 3D позиции начала и конца существующей линии
-            const lineStart = b.parent.position;
-            const lineEnd = b.position;
-            
-            // Проверяем расстояние от нашей целевой точки до этой линии
-            const distToLine = distanceToSegment(targetPos, lineStart, lineEnd);
-            
-            // Если расстояние слишком маленькое, линии пересекутся
-            if (distToLine < 0.25) {
-                return { allowed: false, reason: "Линии энергосети пересекаются!" };
-            }
-        }
-    }
-
     return { allowed: true, snappedAngle: snappedAngle, sector: sector };
-}
-
-// Вспомогательные математические функции для проверки линий
-function powerValueToDistance(startBase, angle, power) {
-    return power * 0.15;
-}
-
-function getTangent(position, angle) {
-    const normal = position.clone().normalize();
-    let baseVector = new THREE.Vector3(1, 0, 0);
-    if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
-    let tangent = baseVector.cross(normal).normalize();
-    tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(angle));
-    return tangent;
-}
-
-function distanceToSegment(p, a, b) {
-    const ab = new THREE.Vector3().subVectors(b, a);
-    const ap = new THREE.Vector3().subVectors(p, a);
-    const t = ap.dot(ab) / ab.lengthSq();
-    if (t < 0) return p.distanceTo(a);
-    if (t > 1) return p.distanceTo(b);
-    const projection = new THREE.Vector3().copy(a).add(ab.multiplyScalar(t));
-    return p.distanceTo(projection);
 }
 
 export function executeShot(scene, bases, startBase, angle, powerValue, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver, onComplete) {
@@ -77,7 +27,7 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
     let projectileColor = 0xffaa00;
     if (moduleToBuild === 'bomb') projectileColor = 0xff0000;
     if (moduleToBuild === 'homing') projectileColor = 0xff00ff; 
-    if (moduleToBuild === 'drone') projectileColor = 0x00ffff; 
+    if (moduleToBuild === 'drone') projectileColor = 0x00ffff; // Синий снаряд радара
 
     const projectile = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: projectileColor }));
     projectile.position.copy(startBase.position);
@@ -120,13 +70,30 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
     animateFlight();
 }
 
+export function checkLineIntersection(bases, startPos, endPos) {
+    const midPoint = startPos.clone().lerp(endPos, 0.5);
+    const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + 0.3);
+    const newCurve = new THREE.QuadraticBezierCurve3(startPos, controlPoint, endPos);
+    const newPoints = newCurve.getPoints(15);
+
+    for (let b of bases) {
+        if (!b.parent || !b.curve) continue; 
+        const existingPoints = b.curve.getPoints(15);
+        for (let p1 of newPoints) {
+            for (let p2 of existingPoints) {
+                if (p1.distanceTo(p2) < 0.12) return true;
+            }
+        }
+    }
+    return false;
+}
+
 function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver) {
     let domeInRange = bases.find(b => b.type === 'dome' && b.owner !== parentBase.owner && b.position.distanceTo(targetPos) < 0.35);
 
     if (domeInRange && !domeInRange.isDisabled) {
         if (moduleToBuild === 'bomb') domeInRange.shieldHits += 1;
         if (moduleToBuild === 'homing') domeInRange.shieldHits += 2;
-
         if (domeInRange.shieldHits >= 2) {
             domeInRange.isDisabled = true;
             if (domeInRange.domeMesh) domeInRange.domeMesh.visible = false;
@@ -137,14 +104,18 @@ function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, secto
 
     if (moduleToBuild === 'bomb') { explode(scene, bases, targetPos, 25, 0.10, null, onGameOver); return; }
     if (moduleToBuild === 'homing') { explode(scene, bases, targetPos, 50, 0.20, null, onGameOver); return; }
-    if (moduleToBuild === 'drone') { return; }
+
+    if (checkLineIntersection(bases, parentBase.position, targetPos)) {
+        explode(scene, bases, targetPos, 25, 0.30, null, onGameOver); 
+        return;
+    }
 
     let collision = false;
     for (let b of bases) {
         if (b === parentBase) continue; 
         if (b.position.distanceTo(targetPos) < 0.15) {
             collision = true;
-            explode(scene, bases, targetPos, 25, 0.10, null, onGameOver);
+            explode(scene, bases, targetPos, 25, 0.30, null, onGameOver);
             b.hp -= 25; 
             if (b.hp <= 0) destroyBaseAndChain(scene, bases, b, onGameOver);
             break;
@@ -182,23 +153,18 @@ export function explode(scene, bases, pos, damage, radius, owner, onGameOver) {
     for (let b of basesCopy) {
         if (b.position.distanceTo(explosionCenter) < radius) { 
             b.hp -= damage;
-            // Вызов всплывающего текста
             showDamageText(scene, b.position, damage);
-            
-            if (b.hp <= 0) {
-                destroyBaseAndChain(scene, bases, b, onGameOver);
-            }
+            if (b.hp <= 0) destroyBaseAndChain(scene, bases, b, onGameOver);
         }
     }
 }
 
-// Функция для создания всплывающего текста
 function showDamageText(scene, position, damage) {
     const canvas = document.createElement('canvas');
     canvas.width = 128;
     canvas.height = 64;
     const context = canvas.getContext('2d');
-    context.fillStyle = '#ff0000'; // Красный цвет
+    context.fillStyle = '#ff0000'; 
     context.font = 'bold 40px Arial';
     context.textAlign = 'center';
     context.fillText(`-${damage}`, 64, 40);
@@ -207,7 +173,6 @@ function showDamageText(scene, position, damage) {
     const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
     const sprite = new THREE.Sprite(material);
     
-    // Позиция чуть выше базы
     const normal = position.clone().normalize();
     sprite.position.copy(position).add(normal.multiplyScalar(0.3));
     
@@ -221,7 +186,7 @@ function showDamageText(scene, position, damage) {
             return;
         }
         life -= 0.02;
-        sprite.position.add(normal.clone().multiplyScalar(0.01)); // Летит вверх
+        sprite.position.add(normal.clone().multiplyScalar(0.01)); 
         sprite.material.opacity = life;
         requestAnimationFrame(animateText);
     };
