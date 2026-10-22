@@ -127,10 +127,12 @@ export function playAITurn(gameContext) {
 
             let power = ['relay', 'generator'].includes(module) ? 10 : 8;
 
+            // ПЕРЕДАЕМ currentPlayer И VISION_RADIUS В КОНЦЕ
             executeShot(scene, bases, startBase, bestAngle, power, module, check.sector, playerGenerators, onGeneratorBuilt, onGameOver, () => {
                 if (updateFog) updateFog(); 
                 setTimeout(performAIAction, 1000); 
-            });
+            }, currentPlayer, VISION_RADIUS);
+            
         } else {
             setTimeout(onTurnEnd, 1000);
         }
