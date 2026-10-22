@@ -129,7 +129,6 @@ export function updateCameraAnimation() {
     }
 }
 
-// ОПТИМИЗИРОВАННЫЙ ТУМАН ВОЙНЫ (Без тяжелых шейдеров)
 function setupFogOfWar() {
     fogCanvas = document.createElement('canvas');
     fogCanvas.width = 1024;
@@ -137,14 +136,19 @@ function setupFogOfWar() {
     fogCtx = fogCanvas.getContext('2d');
     
     fogTexture = new THREE.CanvasTexture(fogCanvas);
+    // Оптимизация текстур: убираем артефакты сглаживания
+    fogTexture.minFilter = THREE.LinearFilter;
+    fogTexture.magFilter = THREE.LinearFilter;
+    fogTexture.wrapS = THREE.RepeatWrapping;
+    fogTexture.wrapT = THREE.ClampToEdgeWrapping;
     
-    // Создаем простую сферу с этой текстурой
-    const fogGeo = new THREE.SphereGeometry(10.01, 32, 32); 
+    // ОПТИМИЗАЦИЯ: Увеличили радиус сферы тумана до 10.05, чтобы убрать белый ореол
+    const fogGeo = new THREE.SphereGeometry(10.05, 32, 32); 
     const fogMat = new THREE.MeshBasicMaterial({ 
         map: fogTexture, 
         transparent: true, 
-        depthWrite: false, 
-        opacity: 1 
+        depthWrite: false,
+        color: 0x000000 // Принудительно черный цвет тумана
     });
     
     fogMesh = new THREE.Mesh(fogGeo, fogMat);
@@ -155,30 +159,25 @@ function setupFogOfWar() {
 export function updateFogOfWar() {
     if (gameOver) return;
     
-    // Заливаем весь холст черным цветом
     fogCtx.fillStyle = '#000000';
     fogCtx.fillRect(0, 0, 1024, 512);
     
-    // Включаем режим "стирания" (делаем дырки в тумане)
     fogCtx.globalCompositeOperation = 'destination-out';
     
     const myBases = bases.filter(b => b.owner === 1);
     
     myBases.forEach(base => {
-        // Перевод 3D координат в 2D UV координаты текстуры
         const u = 0.5 + Math.atan2(-base.position.z, base.position.x) / (2 * Math.PI);
         const v = 0.5 - Math.asin(base.position.y / PLANET_RADIUS) / Math.PI;
         
         const x = u * 1024;
         const y = v * 512;
         
-        // Радиус обзора (в пикселях текстуры)
         const r = ((base.visionRadius || VISION_RADIUS) / (Math.PI * PLANET_RADIUS)) * 1024 * 1.5;
         
-        // Рисуем размытый круг (градиент)
         const gradient = fogCtx.createRadialGradient(x, y, r * 0.5, x, y, r);
-        gradient.addColorStop(0, 'rgba(0,0,0,1)'); // Полностью стираем
-        gradient.addColorStop(1, 'rgba(0,0,0,0)'); // Края плавно переходят в туман
+        gradient.addColorStop(0, 'rgba(0,0,0,1)');
+        gradient.addColorStop(1, 'rgba(0,0,0,0)');
         
         fogCtx.fillStyle = gradient;
         fogCtx.beginPath();
@@ -186,11 +185,9 @@ export function updateFogOfWar() {
         fogCtx.fill();
     });
     
-    // Возвращаем обычный режим рисования
     fogCtx.globalCompositeOperation = 'source-over';
     fogTexture.needsUpdate = true;
 
-    // Логика видимости баз
     bases.forEach(base => {
         if (base.owner === 1) {
             base.mesh.visible = true;
