@@ -7,7 +7,7 @@ import { createPlanet } from './planet.js';
 let scene, camera, controls;
 let bases = [];
 let selectedBase = null;
-let lastSelectedBase = null; // Запоминаем базу перед ходом ИИ
+let lastSelectedBase = null;
 let currentAngle = 0;
 let isCharging = false;
 let power = 0;
@@ -29,7 +29,6 @@ let fogMat;
 let fogMesh;
 let currentPlanet = null;
 
-// Переменные для плавного перелета камеры
 let cameraTargetPos = new THREE.Vector3();
 let cameraTargetLookAt = new THREE.Vector3();
 let isCameraMoving = false;
@@ -48,7 +47,6 @@ export function initGame(_scene, _camera, _controls) {
 }
 
 export function updateCameraTilt() {
-    // Если камера летит к новой базе, пропускаем наклон, чтобы не сбивать анимацию
     if (!selectedBase || isCameraMoving) return;
     
     const target = selectedBase.position;
@@ -75,7 +73,6 @@ export function updateCameraTilt() {
     }
 }
 
-// Вычисляет позицию камеры, но не ставит её сразу, а запускает плавный перелет
 function smoothCenterCameraOnBase(base) {
     if (!base) return;
 
@@ -86,7 +83,6 @@ function smoothCenterCameraOnBase(base) {
         currentDist = 20; 
     }
 
-    // Мы не меняем camera.up здесь резко, это может сломать анимацию
     let baseTangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
     if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
     let tangent = baseTangent.applyAxisAngle(normal, currentCameraAzimuth);
@@ -100,22 +96,16 @@ function smoothCenterCameraOnBase(base) {
     const offset = normal.clone().multiplyScalar(Math.cos(targetPhi) * currentDist)
                          .add(tangent.clone().multiplyScalar(Math.sin(targetPhi) * currentDist));
                          
-    // Задаем цели для анимации
     cameraTargetPos.copy(base.position).add(offset);
     cameraTargetLookAt.copy(base.position);
-    
-    // Устанавливаем флаг, чтобы animate() понял, что нужно двигать камеру
     isCameraMoving = true;
 }
 
-// Вызывается в animate() в main.js (через updateCameraTilt)
 export function updateCameraAnimation() {
     if (isCameraMoving) {
-        // Плавно интерполируем позиции
         camera.position.lerp(cameraTargetPos, 0.1);
         controls.target.lerp(cameraTargetLookAt, 0.1);
         
-        // Если камера достаточно близко, завершаем анимацию
         if (camera.position.distanceTo(cameraTargetPos) < 0.05) {
             camera.position.copy(cameraTargetPos);
             controls.target.copy(cameraTargetLookAt);
@@ -125,7 +115,6 @@ export function updateCameraAnimation() {
 }
 
 function setupFogOfWar() {
-    // УМЕНЬШИЛИ РАДИУС ТУМАНА (было 10 + 0.5, стало 10 + 0.02)
     const fogGeo = new THREE.SphereGeometry(10.02, 64, 64); 
     
     fogMat = new THREE.ShaderMaterial({
@@ -202,26 +191,20 @@ export function updateFogOfWar() {
     });
 }
 
-// Функция переключения баз (W/S)
 function cycleBase(direction) {
     if (isAITurn || gameOver) return;
 
-    // Получаем все базы текущего игрока, с которых можно стрелять
     const shootableBases = bases.filter(b => b.owner === currentPlayer && (b.type === 'hub' || b.type === 'relay'));
     if (shootableBases.length <= 1) return;
 
-    // Находим индекс текущей базы
     let currentIndex = shootableBases.indexOf(selectedBase);
     if (currentIndex === -1) currentIndex = 0;
 
-    // Вычисляем новый индекс
     let newIndex = currentIndex + direction;
     if (newIndex >= shootableBases.length) newIndex = 0;
     if (newIndex < 0) newIndex = shootableBases.length - 1;
 
     const newBase = shootableBases[newIndex];
-    
-    // Выбираем базу и плавно летим к ней
     selectBase(newBase);
 }
 
@@ -242,12 +225,10 @@ function setupEventListeners() {
         const key = e.key.toLowerCase();
         if (key === 'a' || key === 'ф') { rotateCameraAroundTarget(-Math.PI / 16); } 
         else if (key === 'd' || key === 'в') { rotateCameraAroundTarget(Math.PI / 16); }
-        // Кнопки переключения баз
         else if (key === 'w' || key === 'ц') { cycleBase(-1); }
         else if (key === 's' || key === 'ы') { cycleBase(1); }
     });
 
-    // Кнопки на экране
     const btnCyclePrev = document.getElementById('cycle-prev');
     const btnCycleNext = document.getElementById('cycle-next');
     if (btnCyclePrev) btnCyclePrev.addEventListener('click', () => { if (!gameOver && selectedBase) cycleBase(-1); });
@@ -284,10 +265,10 @@ function setupEventListeners() {
     uiElements.fireBtn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         if (!selectedBase || gameOver || isAITurn) return;
-        if (!selectedModuleType) { alert("Сначала выберите модуль внизу!"); return; }
+        if (!selectedModuleType) { window.showMessage("ВНИМАНИЕ", "Сначала выберите модуль внизу!"); return; }
         
         const cost = getModuleCost(selectedModuleType);
-        if (playerEnergy[currentPlayer] < cost) { alert("Не хватает энергии!"); return; }
+        if (playerEnergy[currentPlayer] < cost) { window.showMessage("ВНИМАНИЕ", "Не хватает энергии!"); return; }
         
         isCharging = true;
         power = 0;
@@ -308,7 +289,7 @@ function setupEventListeners() {
                 
                 const check = canShoot(bases, selectedBase, currentAngle, selectedModuleType);
                 if (!check.allowed) {
-                    alert(check.reason);
+                    window.showMessage("ОШИБКА", check.reason);
                     return; 
                 }
 
@@ -318,14 +299,14 @@ function setupEventListeners() {
                 selectedBase.aimAngle = currentAngle;
 
                 executeShot(scene, bases, selectedBase, check.snappedAngle, power, selectedModuleType, check.sector, playerGenerators, 
-                    (genCount) => alert(`Генератор! Твоя выработка: от ${5 + genCount} до ${8 + genCount}`),
+                    (genCount) => window.showMessage("УСПЕХ", `Генератор построен! Твоя выработка: от ${5 + genCount} до ${8 + genCount}`),
                     (owner) => endGame(owner),
                     () => updateFogOfWar(),
                     1, 
                     VISION_RADIUS
                 );
             } else if (power > 0) {
-                alert("Не хватает энергии!");
+                window.showMessage("ВНИМАНИЕ", "Не хватает энергии!");
             }
         }
     });
@@ -376,7 +357,6 @@ function spinEnergy() {
     playerEnergy[currentPlayer] += rolledEnergy;
     hasSpunThisTurn = true;
     
-    // Отключаем пульсацию, делаем кнопку серой
     uiElements.spinBtn.classList.remove('pulse');
     uiElements.spinBtn.disabled = true;
     uiElements.spinBtn.innerText = `+${rolledEnergy}`;
@@ -400,7 +380,6 @@ function endTurn() {
         }
     });
 
-    // Запоминаем выбранную базу перед тем, как ход уйдет ИИ
     if (currentPlayer === 1) {
         lastSelectedBase = selectedBase;
     }
@@ -414,7 +393,6 @@ function endTurn() {
     selectedBase = null;
     arrowHelper.visible = false;
     
-    // Включаем пульсацию и снимаем блокировку с кнопки энергии
     uiElements.spinBtn.disabled = false;
     uiElements.spinBtn.classList.add('pulse');
     uiElements.spinBtn.innerText = '⚡';
@@ -440,13 +418,9 @@ function endTurn() {
         uiElements.bottomPanel.style.pointerEvents = 'auto';
         uiElements.bottomPanel.style.opacity = '1';
 
-        // ВОЗВРАЩАЕМ ИГРОКА К ТОЙ ЖЕ БАЗЕ И С ТЕМ ЖЕ РАКУРСОМ
         if (lastSelectedBase && bases.includes(lastSelectedBase)) {
-            // Если база цела, восстанавливаем на ней
             selectBase(lastSelectedBase);
-            // Камеру НЕ центрируем принудительно, она уже там, где нужно
         } else {
-            // Если базу сломали, находим первую попавшуюся базу игрока
             const myBases = bases.filter(b => b.owner === 1 && (b.type === 'hub' || b.type === 'relay'));
             if (myBases.length > 0) {
                 selectBase(myBases[0]);
@@ -457,8 +431,8 @@ function endTurn() {
 
 function endGame(owner) {
     gameOver = true;
-    alert(`ИГРА ОКОНЧЕНА! Победил Игрок ${owner}!`);
-    setTimeout(() => { location.reload(); }, 3000);
+    window.showMessage("ИГРА ОКОНЧЕНА", `Победил Игрок ${owner}!`);
+    setTimeout(() => { location.reload(); }, 4000); // Даем время прочитать сообщение
 }
 
 function startGame() {
@@ -476,7 +450,7 @@ function startGame() {
     controls.maxDistance = 25 * sizeFactor;
     camera.position.set(0, 0, 20 * sizeFactor);
     controls.target.set(0, 0, 0);
-    isCameraMoving = false; // Сбрасываем анимацию
+    isCameraMoving = false;
 
     let positions = [];
     const minAngle = Math.PI / (totalPlayers * 1.2); 
@@ -508,7 +482,6 @@ function startGame() {
         if (p === 1) {
             selectedBase = baseObj;
             lastSelectedBase = baseObj;
-            // При старте мгновенно ставим камеру
             smoothCenterCameraOnBase(selectedBase);
             camera.position.copy(cameraTargetPos);
             controls.target.copy(cameraTargetLookAt);
@@ -533,7 +506,7 @@ function setupRaycaster() {
 
     window.addEventListener('pointerdown', (event) => {
         if (isAITurn || gameOver) return;
-        if (event.target.closest('#bottom-panel') || event.target.closest('#ui-panel') || event.target.closest('#start-screen')) return;
+        if (event.target.closest('#bottom-panel') || event.target.closest('#ui-panel') || event.target.closest('#start-screen') || event.target.closest('#custom-modal-overlay')) return;
 
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -552,13 +525,13 @@ function setupRaycaster() {
                     clickedBase.hp = Math.min(clickedBase.maxHp, clickedBase.hp + 25);
                     playerEnergy[currentPlayer] -= 1;
                     updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
-                    alert(`База вылечена! HP: ${clickedBase.hp}`);
-                } else { alert("Нельзя лечить или не хватает энергии!"); }
+                    window.showMessage("УСПЕХ", `База вылечена! HP: ${clickedBase.hp}`);
+                } else { window.showMessage("ОШИБКА", "Нельзя лечить или не хватает энергии!"); }
                 return;
             }
 
-            if (clickedBase.owner !== currentPlayer) { alert("Это база противника!"); return; }
-            if (clickedBase.type !== 'hub' && clickedBase.type !== 'relay') { alert("С этого модуля нельзя стрелять!"); return; }
+            if (clickedBase.owner !== currentPlayer) { window.showMessage("ВНИМАНИЕ", "Это база противника!"); return; }
+            if (clickedBase.type !== 'hub' && clickedBase.type !== 'relay') { window.showMessage("ВНИМАНИЕ", "С этого модуля нельзя стрелять!"); return; }
 
             selectBase(clickedBase);
         } else {
