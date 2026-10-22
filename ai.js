@@ -121,13 +121,11 @@ export function playAITurn(gameContext) {
             playerEnergy[currentPlayer] -= cost;
             if (gameContext.updateUI) gameContext.updateUI();
 
-            camera.position.copy(startBase.position.clone().normalize().multiplyScalar(PLANET_RADIUS + 10));
-            controls.target.copy(startBase.position);
-            controls.update();
+            // КАМЕРА БОЛЬШЕ НЕ ПЕРЕМЕЩАЕТСЯ К БАЗЕ ИИ! 
+            // Она остается там, где ее оставил игрок.
 
             let power = ['relay', 'generator'].includes(module) ? 10 : 8;
 
-            // ПЕРЕДАЕМ currentPlayer И VISION_RADIUS В КОНЦЕ
             executeShot(scene, bases, startBase, bestAngle, power, module, check.sector, playerGenerators, onGeneratorBuilt, onGameOver, () => {
                 if (updateFog) updateFog(); 
                 setTimeout(performAIAction, 1000); 
