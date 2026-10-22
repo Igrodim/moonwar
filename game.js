@@ -29,10 +29,9 @@ let fogMat;
 let fogMesh;
 let currentPlanet = null;
 
-// Переменные для камеры
 let cameraTargetPos = new THREE.Vector3();
 let cameraTargetLookAt = new THREE.Vector3();
-let cameraTargetUp = new THREE.Vector3(); // ВАЖНО: Вектор направления "верха" камеры
+let cameraTargetUp = new THREE.Vector3();
 let isCameraMoving = false;
 
 export function initGame(_scene, _camera, _controls) {
@@ -53,10 +52,6 @@ export function updateCameraTilt() {
     
     const target = selectedBase.position;
     const normal = target.clone().normalize();
-    
-    // Удерживаем камеру ровно (верх камеры смотрит от планеты)
-    camera.up.lerp(normal, 0.1).normalize();
-
     const dist = camera.position.distanceTo(target);
     
     const minDist = 1.5;  
@@ -104,7 +99,7 @@ function smoothCenterCameraOnBase(base) {
                          
     cameraTargetPos.copy(base.position).add(offset);
     cameraTargetLookAt.copy(base.position);
-    cameraTargetUp.copy(normal); // Устанавливаем правильный "верх"
+    cameraTargetUp.copy(normal); 
     isCameraMoving = true;
 }
 
@@ -112,12 +107,12 @@ export function updateCameraAnimation() {
     if (isCameraMoving) {
         camera.position.lerp(cameraTargetPos, 0.1);
         controls.target.lerp(cameraTargetLookAt, 0.1);
-        camera.up.lerp(cameraTargetUp, 0.1).normalize(); // Плавно выравниваем
+        camera.up.lerp(cameraTargetUp, 0.1).normalize();
         
         if (camera.position.distanceTo(cameraTargetPos) < 0.05) {
             camera.position.copy(cameraTargetPos);
             controls.target.copy(cameraTargetLookAt);
-            camera.up.copy(cameraTargetUp); // Фиксируем в конце
+            camera.up.copy(cameraTargetUp);
             isCameraMoving = false;
         }
     }
@@ -334,6 +329,7 @@ function setupEventListeners() {
     });
 }
 
+// ВРАЩЕНИЕ КАМЕРЫ (ОРИГИНАЛЬНАЯ ЛОГИКА)
 function rotateCameraAroundTarget(angle) {
     if (!selectedBase) return;
     
@@ -342,11 +338,18 @@ function rotateCameraAroundTarget(angle) {
     const target = selectedBase.position;
     const normal = target.clone().normalize();
 
-    const offset = camera.position.clone().sub(target);
-    offset.applyAxisAngle(normal, angle);
-    camera.position.copy(target).add(offset);
-
-    camera.up.applyAxisAngle(normal, angle);
+    if (isCameraMoving) {
+        // Если камера летит, вращаем точку назначения
+        const targetOffset = cameraTargetPos.clone().sub(target);
+        targetOffset.applyAxisAngle(normal, angle);
+        cameraTargetPos.copy(target).add(targetOffset);
+    } else {
+        // Иначе вращаем текущую камеру
+        const offset = camera.position.clone().sub(target);
+        offset.applyAxisAngle(normal, angle);
+        camera.position.copy(target).add(offset);
+        camera.up.applyAxisAngle(normal, angle);
+    }
     
     controls.update();
 }
@@ -492,7 +495,6 @@ function startGame() {
             selectedBase = baseObj;
             lastSelectedBase = baseObj;
             
-            // ИСПРАВЛЕНИЕ: Устанавливаем начальный вектор "вверх" камеры, чтобы она не заваливалась
             const normal = baseObj.position.clone().normalize();
             camera.up.copy(normal);
             
