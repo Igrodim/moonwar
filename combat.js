@@ -1,7 +1,7 @@
 import { PLANET_RADIUS, AAO_RADIUS, createNewBase, destroyBaseAndChain, updateHealthBar } from './entities.js';
 
 export function canShoot(bases, startBase, angle, moduleToBuild) {
-    const ANGLE_STEP = 11.25; // 32 направления
+    const ANGLE_STEP = 11.25; 
     const snappedAngle = Math.round(angle / ANGLE_STEP) * ANGLE_STEP;
     let sector = Math.round(snappedAngle / ANGLE_STEP) % 32;
     if (sector < 0) sector += 32; 
@@ -36,7 +36,6 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
     const startTime = performance.now();
     const duration = 1000;
     
-    // ЕДИНАЯ КРИВАЯ ДЛЯ ВИЗУАЛА И КОЛЛИЗИЙ
     const travelDistance = startBase.position.distanceTo(targetPos);
     const maxHeight = Math.min(travelDistance * 0.2, 0.4);
     const midPoint = startBase.position.clone().lerp(targetPos, 0.5);
@@ -51,15 +50,10 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
             if (startBase.owner !== 1) {
                 let visible = false;
                 for (let b of bases) {
-                    if (b.owner === 1 && b.position.distanceTo(projectile.position) < (b.visionRadius || VISION_RADIUS)) {
-                        visible = true;
-                        break;
-                    }
+                    if (b.owner === 1 && b.position.distanceTo(projectile.position) < (b.visionRadius || VISION_RADIUS)) { visible = true; break; }
                 }
                 projectile.visible = visible;
-            } else {
-                projectile.visible = true;
-            }
+            } else { projectile.visible = true; }
 
             for (let b of bases) {
                 if (b.type === 'aao' && b.isActive && b.owner !== startBase.owner) {
@@ -73,8 +67,6 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
                     }
                 }
             }
-
-            // Движение по кривой Безье
             projectile.position.copy(flightCurve.getPoint(t));
             requestAnimationFrame(animateFlight);
         } else {
@@ -95,7 +87,6 @@ export function checkLineIntersection(bases, startPos, endPos, parentBase) {
     for (let b of bases) {
         if (!b.parent || !b.curve) continue; 
         if (b.parent === parentBase) continue; 
-        
         const existingPoints = b.curve.getPoints(20);
         for (let p1 of newPoints) {
             if (p1.distanceTo(startPos) < 0.25) continue; 
@@ -143,9 +134,7 @@ function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, secto
         }
     }
 
-    if (!collision) {
-        createNewBase(scene, bases, targetPos, parentBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt);
-    }
+    if (!collision) { createNewBase(scene, bases, targetPos, parentBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt); }
 }
 
 export function explode(scene, bases, pos, damage, radius, owner, onGameOver) {
@@ -157,7 +146,6 @@ export function explode(scene, bases, pos, damage, radius, owner, onGameOver) {
     explosion.position.copy(explosionCenter);
     scene.add(explosion);
 
-    // ОПТИМИЗИРОВАННЫЙ ВЗРЫВ БЕЗ SETINTERVAL
     const startTime = performance.now();
     const duration = 600;
 
@@ -166,12 +154,8 @@ export function explode(scene, bases, pos, damage, radius, owner, onGameOver) {
         const t = elapsed / duration;
 
         if (t >= 1) {
-            scene.remove(explosion);
-            explosionGeo.dispose();
-            explosionMat.dispose();
-            return;
+            scene.remove(explosion); explosionGeo.dispose(); explosionMat.dispose(); return;
         }
-
         const scale = 1 + t * 3;
         explosion.scale.set(scale, scale, scale);
         explosionMat.opacity = 1 - t;
@@ -180,7 +164,6 @@ export function explode(scene, bases, pos, damage, radius, owner, onGameOver) {
     animateExplosion();
 
     if (damage === 0) return; 
-
     const basesCopy = [...bases];
     for (let b of basesCopy) {
         if (b.position.distanceTo(explosionCenter) < radius) { 
@@ -194,12 +177,9 @@ export function explode(scene, bases, pos, damage, radius, owner, onGameOver) {
 
 function showDamageText(scene, position, damage) {
     const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 64;
+    canvas.width = 128; canvas.height = 64;
     const context = canvas.getContext('2d');
-    context.fillStyle = '#ff0000'; 
-    context.font = 'bold 40px Arial';
-    context.textAlign = 'center';
+    context.fillStyle = '#ff0000'; context.font = 'bold 40px Arial'; context.textAlign = 'center';
     context.fillText(`-${damage}`, 64, 40);
 
     const texture = new THREE.CanvasTexture(canvas);
@@ -214,13 +194,7 @@ function showDamageText(scene, position, damage) {
 
     let life = 1;
     const animateText = () => {
-        if (life <= 0) {
-            scene.remove(sprite);
-            // ОЧИСТКА ПАМЯТИ ТЕКСТУРЫ И МАТЕРИАЛА
-            texture.dispose();
-            material.dispose();
-            return;
-        }
+        if (life <= 0) { scene.remove(sprite); texture.dispose(); material.dispose(); return; }
         life -= 0.02;
         sprite.position.add(normal.clone().multiplyScalar(0.01)); 
         sprite.material.opacity = life;
