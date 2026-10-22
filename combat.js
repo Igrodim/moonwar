@@ -15,7 +15,7 @@ export function canShoot(bases, startBase, angle, moduleToBuild) {
     return { allowed: true, snappedAngle: finalAngle };
 }
 
-export function executeShot(scene, bases, startBase, angle, powerValue, moduleToBuild, playerGenerators, onGeneratorBuilt, onGameOver, onComplete) {
+export function executeShot(scene, bases, startBase, angle, powerValue, moduleToBuild, onGameOver, onComplete) {
     const normal = startBase.position.clone().normalize();
     let baseVector = new THREE.Vector3(1, 0, 0);
     if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
@@ -50,20 +50,15 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
         } else {
             scene.remove(projectile);
             try {
-                handleLanding(scene, bases, targetPos, startBase, moduleToBuild, angle, playerGenerators, onGeneratorBuilt, onGameOver);
+                if (moduleToBuild === 'bomb') explode(scene, bases, targetPos, 25, onGameOver);
+                else if (moduleToBuild === 'homing') explode(scene, bases, targetPos, 50, onGameOver);
+                else createNewBase(scene, bases, targetPos, startBase, moduleToBuild, angle);
             } finally {
                 if (onComplete) onComplete();
             }
         }
     }
     animateFlight();
-}
-
-function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, angle, playerGenerators, onGeneratorBuilt, onGameOver) {
-    if (moduleToBuild === 'bomb') { explode(scene, bases, targetPos, 25, onGameOver); return; }
-    if (moduleToBuild === 'homing') { explode(scene, bases, targetPos, 50, onGameOver); return; }
-
-    createNewBase(scene, bases, targetPos, parentBase, moduleToBuild, angle, playerGenerators, onGeneratorBuilt);
 }
 
 export function explode(scene, bases, pos, damage, onGameOver) {
