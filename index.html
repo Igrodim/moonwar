@@ -7,7 +7,6 @@
         body { margin: 0; padding: 0; background-color: #050510; overflow: hidden; font-family: 'Orbitron', Arial, sans-serif; color: white; user-select: none; }
         canvas { display: block; }
         
-        /* --- ОБЩИЕ ЭЛЕМЕНТЫ --- */
         #top-info { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 8px; border: 1px solid #4a4a6a; z-index: 10; }
         #turn-text { font-size: 20px; font-weight: bold; color: #00aaff; text-shadow: 0 0 10px #00aaff; }
         #energy-text { font-size: 18px; margin-top: 5px; color: #00aaff; text-shadow: 0 0 10px #00aaff; }
@@ -36,12 +35,13 @@
         #spin-btn:hover:not(:disabled) { background: rgba(0, 170, 255, 0.2); }
         #spin-btn:disabled { background: #222; cursor: not-allowed; border-color: #444; color: #555; animation: none; box-shadow: none; }
 
-        /* Кнопки управления камерой (W, S, A, D) - ЕДИНЫЙ СТИЛЬ */
+        /* ФИКС: Жесткая ширина 55px для всех кнопок */
         .camera-controls { display: flex; gap: 10px; margin-left: 10px; }
         .camera-controls button {
-            background: #1a1a2e; color: #00aaff; border: 1px solid #00aaff; padding: 15px 20px;
+            background: #1a1a2e; color: #00aaff; border: 1px solid #00aaff; 
+            padding: 15px 0; width: 55px; text-align: center; 
             border-radius: 8px; cursor: pointer; font-size: 20px; font-weight: bold; font-family: 'Orbitron', sans-serif;
-            transition: all 0.2s;
+            transition: all 0.2s; box-sizing: border-box;
         }
         .camera-controls button:hover { background: rgba(0, 170, 255, 0.2); box-shadow: 0 0 15px #00aaff; }
 
@@ -66,9 +66,9 @@
 
         #ui-panel {
             position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%);
-            background: rgba(10, 10, 25, 0.9); padding: 15px 30px; border-radius: 10px;
+            background: rgba(10, 10, 25, 0.95); padding: 15px 30px; border-radius: 10px;
             display: none; text-align: center; border: 2px solid #4a4a6a; box-shadow: 0 0 20px rgba(0, 170, 255, 0.1);
-            z-index: 10; backdrop-filter: blur(5px);
+            z-index: 10;
         }
         #ui-panel button { 
             background: #1a1a2e; color: white; border: 1px solid #00aaff; padding: 8px 15px; font-size: 16px; 
@@ -82,7 +82,6 @@
         #fire-btn { background: rgba(0, 170, 255, 0.2) !important; font-weight: bold; width: 100%; margin-top: 10px; border-color: #00aaff !important; color: #fff; }
         #fire-btn:hover { background: #00aaff !important; color: black; box-shadow: 0 0 20px #00aaff; }
 
-        /* --- СТИЛИ СТАРТОВОГО ЭКРАНА --- */
         #start-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: radial-gradient(circle at center, #1a1a2e 0%, #050510 100%);
@@ -104,9 +103,7 @@
         @keyframes stars { from { background-position: 0 0; } to { background-position: 0 -200px; } }
 
         .menu-card {
-            background: rgba(20, 20, 40, 0.6);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
+            background: rgba(20, 20, 40, 0.95); /* Убрали backdrop-filter */
             border: 1px solid rgba(0, 170, 255, 0.3);
             padding: 40px 60px;
             border-radius: 20px;
@@ -202,10 +199,9 @@
         }
         #start-btn:hover::before { left: 100%; }
 
-        /* --- КАСТОМНОЕ МОДАЛЬНОЕ ОКНО --- */
         #custom-modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px);
+            background: rgba(0, 0, 0, 0.7);
             display: none; justify-content: center; align-items: center;
             z-index: 2000; opacity: 0; transition: opacity 0.3s ease;
         }
@@ -288,7 +284,6 @@
         <div id="energy-wheel-container">
             <button id="spin-btn" class="pulse">⚡</button>
             <div class="camera-controls">
-                <!-- Кнопки без лишних классов, теперь они все одинаковые -->
                 <button id="cycle-prev" title="Предыдущая база (W)">W</button>
                 <button id="cycle-next" title="Следующая база (S)">S</button>
                 <button id="rotate-left" title="Повернуть камеру влево (A)">A</button>
@@ -325,7 +320,6 @@
         <button id="end-turn-btn">КОНЕЦ ХОДА</button>
     </div>
 
-    <!-- КАСТОМНОЕ МОДАЛЬНОЕ ОКНО -->
     <div id="custom-modal-overlay">
         <div class="custom-modal-box">
             <div id="custom-modal-title">УВЕДОМЛЕНИЕ</div>
