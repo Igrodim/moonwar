@@ -3,7 +3,7 @@ export const BASE_HEIGHT = 0.1;
 export const DOME_RADIUS = 0.35;
 export const AAO_RADIUS = 0.35; 
 export const VISION_RADIUS = 0.75;        // Обзор обычной базы
-export const RECON_VISION_RADIUS = 1.5;   // Обзор Радара (drone)
+export const RECON_VISION_RADIUS = 1.5;   // Обзор Радара
 
 export const playerColors = [];
 for (let i = 0; i < 32; i++) {
@@ -14,8 +14,7 @@ for (let i = 0; i < 32; i++) {
 export function getGeometry(type) {
     if (type === 'aao') return new THREE.CylinderGeometry(0.06, 0.06, BASE_HEIGHT, 3);
     if (type === 'generator') return new THREE.BoxGeometry(0.08, BASE_HEIGHT, 0.08);
-    // Радар (drone) - это конус
-    if (type === 'drone') return new THREE.ConeGeometry(0.06, BASE_HEIGHT * 3, 16); 
+    if (type === 'drone') return new THREE.ConeGeometry(0.06, BASE_HEIGHT * 3, 16); // Конус для радара
     return new THREE.CylinderGeometry(0.05, 0.05, BASE_HEIGHT, 16);
 }
 
@@ -46,7 +45,7 @@ export function createNewBase(scene, bases, pos, parentBase, moduleType, sector,
     if (moduleType === 'generator') newBaseColor = 0x00ff00; 
     if (moduleType === 'dome') newBaseColor = 0xffff00; 
     if (moduleType === 'aao') newBaseColor = 0xff00ff; 
-    if (moduleType === 'drone') newBaseColor = 0x00ffff; // Радар голубой
+    if (moduleType === 'drone') newBaseColor = 0x00ffff; 
 
     const newBase = new THREE.Mesh(getGeometry(moduleType), new THREE.MeshBasicMaterial({ color: newBaseColor }));
     layFlatOnSphere(newBase, pos);
@@ -92,13 +91,17 @@ export function createNewBase(scene, bases, pos, parentBase, moduleType, sector,
 }
 
 export function destroyBaseAndChain(scene, bases, base, onGameOver) {
-    console.log(`Уничтожена база типа ${base.type} Игрока ${base.owner}`);
     const children = bases.filter(b => b.parent === base);
     children.forEach(child => destroyBaseAndChain(scene, bases, child, onGameOver));
+
     scene.remove(base.mesh);
     if (base.lineMesh) scene.remove(base.lineMesh);
     if (base.domeMesh) scene.remove(base.domeMesh); 
+    
     const index = bases.indexOf(base);
     if (index > -1) bases.splice(index, 1);
-    if (base.type === 'hub') { if (onGameOver) onGameOver(base.owner); }
+
+    if (base.type === 'hub') {
+        if (onGameOver) onGameOver(base.owner);
+    }
 }
