@@ -3,7 +3,7 @@ import { executeShot, canShoot } from './combat.js';
 import { playAITurn } from './ai.js';
 import { uiElements, updateUI, clearSelection } from './ui.js';
 
-let scene, camera, controls;
+let scene, camera;
 let bases = [];
 let selectedBase = null;
 let currentAngle = 0;
@@ -19,68 +19,71 @@ let playerGenerators = {};
 let hasSpunThisTurn = false;
 let selectedModuleType = null;
 let gameOver = false;
+
+// Переменные для нашей ручной камеры
+let cameraDistance = 20;
+let cameraAzimuth = 0;
 let fogMat;
 
-export function initGame(_scene, _camera, _controls) {
+export function initGame(_scene, _camera) {
     scene = _scene;
     camera = _camera;
-    controls = _controls;
 
     arrowHelper = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), 1, 0xffff00, 0.2, 0.1);
     arrowHelper.visible = false;
     scene.add(arrowHelper);
 
+    // Зум колесиком
+    window.addEventListener('wheel', (e) => {
+        if (gameOver) return;
+        cameraDistance += e.deltaY * 0.01;
+        cameraDistance = Math.max(2, Math.min(30, cameraDistance));
+    });
+
     setupFogOfWar();
     setupEventListeners();
 }
 
-// СТРОГО 90 ГРАДУСОВ СВЕРХУ -> 70 ПРИ ПРИБЛИЖЕНИИ
-export function updateCameraTilt() {
-    if (!selectedBase) return;
-    
-    const target = selectedBase.position;
-    const normal = target.clone().normalize();
-    const dist = camera.position.distanceTo(target);
-    
-    const minDist = 1.5;  
-    const maxDist = 20;   
-    
-    let t = (dist - minDist) / (maxDist - minDist);
-    t = Math.max(0, Math.min(1, t));
-    
-    // 0 градусов (90 к поверхности) вдали, 20 градусов (70 к поверхности) вблизи
-    const targetPhi = THREE.MathUtils.degToRad(20 * (1 - t)); 
-    
-    const offset = camera.position.clone().sub(target);
-    const currentPhi = offset.angleTo(normal);
-    
-    if (Math.abs(currentPhi - targetPhi) > 0.005) {
-        const axis = new THREE.Vector3().crossVectors(offset, normal).normalize();
-        if (axis.lengthSq() > 0.001) {
-            offset.applyAxisAngle(axis, (currentPhi - targetPhi) * 0.1);
-            camera.position.copy(target).add(offset);
-        }
+// ЧИСТАЯ И БЕЗОПАСНАЯ КАМЕРА (90 -> 70 ГРАДУСОВ)
+export function updateCamera() {
+    if (!selectedBase) {
+        // Если база не выбрана (экран ИИ), смотрим на планету сверху
+        camera.position.set(0, 20, 20);
+        camera.lookAt(0, 0, 0);
+        return;
     }
+
+    const target = selectedBase.position;
+    const normal = target.clone().normalize(); // Вектор от центра планеты к базе
     
-    // БЕЗОПАСНЫЙ UP (защита от Gimbal Lock при взгляде ровно вниз)
-    const lookDir = target.clone().sub(camera.position).normalize();
-    let right = new THREE.Vector3().crossVectors(lookDir, normal).normalize();
-    if (right.lengthSq() < 0.001) right = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
-    camera.up.copy(new THREE.Vector3().crossVectors(right, lookDir).normalize());
+    // Строим тангенс (перпендикуляр к нормали)
+    let up = new THREE.Vector3(0, 1, 0);
+    let tangent = new THREE.Vector3().crossVectors(normal, up).normalize();
+    if (tangent.lengthSq() < 0.1) tangent.set(1, 0, 0); // Если база на полюсе
+
+    // Вращаем тангенс на угол камеры (для кнопок A/D)
+    tangent.applyAxisAngle(normal, cameraAzimuth);
+    const bitangent = new THREE.Vector3().crossVectors(normal, tangent).normalize();
+
+    // Вычисляем угол наклона (от 0 до 20 градусов от нормали)
+    let t = (cameraDistance - 2) / (20 - 2);
+    t = Math.max(0, Math.min(1, t));
+    const phi = THREE.MathUtils.degToRad(20 * (1 - t)); // 20 градусов вблизи, 0 (90 к поверхности) вдали
+
+    // Итоговая позиция камеры
+    const offset = normal.clone().multiplyScalar(Math.cos(phi) * cameraDistance)
+                 .add(bitangent.clone().multiplyScalar(Math.sin(phi) * cameraDistance));
+
+    camera.position.copy(target).add(offset);
+    
+    // БЕЗОПАСНЫЙ UP: Всегда используем тангенс. Это исключает Gimbal Lock на 90 градусах!
+    camera.up.copy(tangent);
+    camera.lookAt(target);
 }
 
 function centerCameraOnBase(base) {
-    const normal = base.position.clone().normalize();
-    const dist = 15;
-    
-    camera.position.copy(base.position).add(normal.clone().multiplyScalar(dist));
-    controls.target.copy(base.position);
-    
-    let baseTangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
-    if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
-    camera.up.copy(baseTangent);
-    
-    controls.update();
+    cameraDistance = 15;
+    // Ничего больше не делаем, updateCamera всё сделает сам
 }
 
 function setupFogOfWar() {
@@ -128,8 +131,6 @@ export function updateFogOfWar() {
     bases.forEach(base => {
         if (base.owner === 1) {
             base.mesh.visible = true;
-            if (base.lineMesh) base.lineMesh.visible = true;
-            if (base.domeMesh) base.domeMesh.visible = true;
             if (base.healthSprite) base.healthSprite.visible = true;
             return;
         }
@@ -138,32 +139,20 @@ export function updateFogOfWar() {
             if (ally.position.distanceTo(base.position) < 2.0) { inVision = true; break; }
         }
         base.mesh.visible = inVision;
-        if (base.lineMesh) base.lineMesh.visible = inVision;
-        if (base.domeMesh) base.domeMesh.visible = inVision;
         if (base.healthSprite) base.healthSprite.visible = inVision;
     });
 }
 
 function setupEventListeners() {
-    // A/D ИСПРАВЛЕНЫ (Крутят чисто позицию, UP восстановится в updateCameraTilt)
+    // A/D ИСПРАВЛЕНЫ (просто меняем угол)
     uiElements.rotateLeft.addEventListener('click', () => {
         if (isCharging) return;
-        const target = controls.target;
-        const normal = target.clone().normalize();
-        const offset = camera.position.clone().sub(target);
-        offset.applyAxisAngle(normal, -Math.PI / 8);
-        camera.position.copy(target).add(offset);
-        controls.update();
+        cameraAzimuth -= Math.PI / 8;
     });
 
     uiElements.rotateRight.addEventListener('click', () => {
         if (isCharging) return;
-        const target = controls.target;
-        const normal = target.clone().normalize();
-        const offset = camera.position.clone().sub(target);
-        offset.applyAxisAngle(normal, Math.PI / 8);
-        camera.position.copy(target).add(offset);
-        controls.update();
+        cameraAzimuth += Math.PI / 8;
     });
 
     uiElements.spinBtn.addEventListener('click', () => {
@@ -227,11 +216,9 @@ function setupEventListeners() {
                     playerEnergy[currentPlayer] -= cost;
                     updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
                     
-                    executeShot(scene, bases, selectedBase, check.snappedAngle, power, selectedModuleType, playerGenerators,
-                        (genCount) => alert(`Генератор! Выработка: ${5+genCount} - ${8+genCount}`),
-                        (owner) => endGame(owner),
-                        () => { updateFogOfWar(); }
-                    );
+                    executeShot(scene, bases, selectedBase, check.snappedAngle, power, selectedModuleType, endGame, () => {
+                        updateFogOfWar();
+                    });
                 } else {
                     alert(check.reason);
                 }
@@ -239,7 +226,6 @@ function setupEventListeners() {
         }
     });
 
-    // ИСПРАВЛЕННЫЙ КОНЕЦ ХОДА (Автоматически выбирает базу Игрока 1)
     uiElements.endTurnBtn.addEventListener('click', () => {
         if (gameOver) return;
         currentPlayer++;
@@ -256,11 +242,12 @@ function setupEventListeners() {
         if (currentPlayer > 1) {
             uiElements.bottomPanel.style.pointerEvents = 'none';
             uiElements.bottomPanel.style.opacity = '0.5';
-            playAITurn({ scene, camera, controls, bases, currentPlayer, playerEnergy, playerGenerators, onTurnEnd: endTurn, onGameOver: endGame, onGeneratorBuilt: () => {}, updateUI: () => updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors), updateFog: updateFogOfWar });
+            playAITurn({ scene, bases, currentPlayer, playerEnergy, playerGenerators, onTurnEnd: endTurn, onGameOver: endGame, updateUI: () => updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors), updateFog: updateFogOfWar });
         } else {
-            // Ход игрока: восстанавливаем его базу и стрелку
             uiElements.bottomPanel.style.pointerEvents = 'auto';
             uiElements.bottomPanel.style.opacity = '1';
+            
+            // АВТОВЫБОР БАЗЫ ИГРОКА
             let hub = bases.find(b => b.owner === 1 && b.type === 'hub');
             if (hub) {
                 selectedBase = hub;
@@ -299,7 +286,7 @@ function startGame() {
         layFlatOnSphere(hub, pos);
         scene.add(hub);
         
-        let baseObj = { mesh: hub, position: pos, owner: p, hp: 100, maxHp: 100, type: 'hub', parent: null, angle: 0, lineMesh: null, aimAngle: 0 };
+        let baseObj = { mesh: hub, position: pos, owner: p, hp: 100, maxHp: 100, type: 'hub', parent: null, angle: 0, aimAngle: 0 };
         bases.push(baseObj);
         createHealthBar(scene, baseObj);
         
@@ -332,11 +319,11 @@ function endTurn() {
     if (currentPlayer > 1) {
         uiElements.bottomPanel.style.pointerEvents = 'none';
         uiElements.bottomPanel.style.opacity = '0.5';
-        playAITurn({ scene, camera, controls, bases, currentPlayer, playerEnergy, playerGenerators, onTurnEnd: endTurn, onGameOver: endGame, onGeneratorBuilt: () => {}, updateUI: () => updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors), updateFog: updateFogOfWar });
+        playAITurn({ scene, bases, currentPlayer, playerEnergy, playerGenerators, onTurnEnd: endTurn, onGameOver: endGame, updateUI: () => updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors), updateFog: updateFogOfWar });
     } else {
         uiElements.bottomPanel.style.pointerEvents = 'auto';
         uiElements.bottomPanel.style.opacity = '1';
-        // Восстанавливаем стрелку для игрока 1
+        // АВТОВЫБОР БАЗЫ ИГРОКА
         let hub = bases.find(b => b.owner === 1 && b.type === 'hub');
         if (hub) {
             selectedBase = hub;
