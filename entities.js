@@ -25,20 +25,27 @@ export function layFlatOnSphere(mesh, position) {
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
 }
 
-// ПЛАШКА ЗДОРОВЬЯ
+// --- ОБНОВЛЕННАЯ ПЛАШКА ЗДОРОВЬЯ ---
 export function createHealthBar(scene, base) {
     const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 32;
+    // Уменьшаем разрешение холста, так как полоска теперь маленькая (это экономит память)
+    canvas.width = 64;
+    canvas.height = 16;
     const ctx = canvas.getContext('2d');
     
     const tex = new THREE.CanvasTexture(canvas);
-    const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
+    // Устанавливаем фильтрацию, чтобы при уменьшении не было мыла
+    tex.minFilter = THREE.LinearFilter; 
+    
+    const mat = new THREE.SpriteMaterial({ map: tex, depthTest: true, depthWrite: false, transparent: true });
     const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(0.8, 0.2, 1);
+    
+    // УМЕНЬШАЕМ РАЗМЕР В 3D (было 0.8 на 0.2)
+    sprite.scale.set(0.15, 0.04, 1); 
     
     const normal = base.position.clone().normalize();
-    sprite.position.copy(base.position).add(normal.clone().multiplyScalar(0.4));
+    // Опускаем полоску чуть ближе к базе (было 0.4)
+    sprite.position.copy(base.position).add(normal.clone().multiplyScalar(0.2));
     
     base.healthSprite = sprite;
     base.healthCanvas = canvas;
@@ -46,7 +53,7 @@ export function createHealthBar(scene, base) {
     base.healthTex = tex;
     scene.add(sprite);
     
-    updateHealthBar(base); // Первичная отрисовка
+    updateHealthBar(base);
 }
 
 export function updateHealthBar(base) {
@@ -54,22 +61,30 @@ export function updateHealthBar(base) {
     const ctx = base.healthCtx;
     const percent = Math.max(0, Math.floor((base.hp / base.maxHp) * 100));
     
-    ctx.clearRect(0, 0, 128, 32);
+    // Очищаем холст (64x16)
+    ctx.clearRect(0, 0, 64, 16);
     
-    // Черная обводка
-    ctx.fillStyle = 'rgba(0,0,0,0.8)';
-    ctx.fillRect(0, 0, 128, 32);
+    // 1. Рисуем задний фон (черный, скругленный)
+    ctx.beginPath();
+    // roundRect(x, y, width, height, radius)
+    ctx.roundRect(0, 0, 64, 16, 8); // 8 = половина высоты (идеальное скругление)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fill();
     
-    // Цвет в зависимости от здоровья
-    ctx.fillStyle = percent > 50 ? '#00ff00' : (percent > 25 ? '#ffaa00' : '#ff0000');
-    ctx.fillRect(2, 2, 124, 28);
-    
-    // Текст
-    ctx.fillStyle = '#000';
-    ctx.font = 'bold 20px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`${percent}%`, 64, 16);
+    // 2. Рисуем полоску здоровья (цветную)
+    if (percent > 0) {
+        ctx.save();
+        ctx.beginPath();
+        // Внутренний прямоугольник с отступом 2 пикселя
+        ctx.roundRect(2, 2, 60, 12, 6); 
+        ctx.clip(); // Обрезаем всё, что выходит за скругленные края
+        
+        ctx.fillStyle = percent > 50 ? '#00ff00' : (percent > 25 ? '#ffaa00' : '#ff0000');
+        const fillWidth = 60 * (percent / 100);
+        ctx.fillRect(2, 2, fillWidth, 12);
+        
+        ctx.restore();
+    }
     
     base.healthTex.needsUpdate = true;
 }
@@ -114,14 +129,14 @@ export function createNewBase(scene, bases, pos, parentBase, moduleType, sector,
         lineMesh: lineData.tube,
         curve: lineData.curve,
         visionRadius: moduleType === 'drone' ? RECON_VISION_RADIUS : VISION_RADIUS,
-        aimAngle: 0 // Запоминаем угол прицела
+        aimAngle: 0 
     };
     
     if (moduleType === 'dome') { baseObj.shieldHits = 0; baseObj.isDisabled = false; }
     if (moduleType === 'aao') { baseObj.isActive = true; }
 
     bases.push(baseObj);
-    createHealthBar(scene, baseObj); // Создаем плашку здоровья
+    createHealthBar(scene, baseObj);
 
     if (moduleType === 'generator') {
         playerGenerators[parentBase.owner]++;
@@ -148,7 +163,7 @@ export function destroyBaseAndChain(scene, bases, base, onGameOver) {
     scene.remove(base.mesh);
     if (base.lineMesh) scene.remove(base.lineMesh);
     if (base.domeMesh) scene.remove(base.domeMesh); 
-    if (base.healthSprite) scene.remove(base.healthSprite); // Удаляем плашку
+    if (base.healthSprite) scene.remove(base.healthSprite);
     
     const index = bases.indexOf(base);
     if (index > -1) bases.splice(index, 1);
