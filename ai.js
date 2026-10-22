@@ -12,29 +12,19 @@ export function playAITurn(gameContext) {
     if (gameContext.updateUI) gameContext.updateUI();
 
     const performAIAction = () => {
-        if (playerEnergy[currentPlayer] < 1) {
-            setTimeout(onTurnEnd, 1000);
-            return;
-        }
+        if (playerEnergy[currentPlayer] < 1) { setTimeout(onTurnEnd, 1000); return; }
 
         let myBases = bases.filter(b => b.owner === currentPlayer && (b.type === 'hub' || b.type === 'relay'));
-        if (myBases.length === 0) {
-            setTimeout(onTurnEnd, 1000);
-            return;
-        }
+        if (myBases.length === 0) { setTimeout(onTurnEnd, 1000); return; }
 
         let startBase = myBases[Math.floor(Math.random() * myBases.length)];
 
-        // 1. Поиск видимых врагов
         let visibleEnemies = [];
         for (let enemy of bases) {
             if (enemy.owner === currentPlayer) continue;
             for (let ally of myBases) {
                 const radius = ally.visionRadius || VISION_RADIUS;
-                if (ally.position.distanceTo(enemy.position) < radius) {
-                    visibleEnemies.push(enemy);
-                    break;
-                }
+                if (ally.position.distanceTo(enemy.position) < radius) { visibleEnemies.push(enemy); break; }
             }
         }
 
@@ -45,7 +35,6 @@ export function playAITurn(gameContext) {
         let check;
         let targetBase = null;
 
-        // 2. Логика: Атака или Расширение?
         if (visibleEnemies.length > 0) {
             targetBase = visibleEnemies.reduce((prev, curr) => {
                 return (curr.position.distanceTo(startBase.position) < prev.position.distanceTo(startBase.position)) ? curr : prev;
@@ -71,7 +60,6 @@ export function playAITurn(gameContext) {
             }
         }
 
-        // 3. Вычисление угла
         if (targetBase) {
             const normal = startBase.position.clone().normalize();
             const toEnemy = targetBase.position.clone().sub(startBase.position);
@@ -83,11 +71,8 @@ export function playAITurn(gameContext) {
             
             let angleRad = Math.atan2(tangentDir.dot(new THREE.Vector3().crossVectors(normal, baseTangent)), tangentDir.dot(baseTangent));
             bestAngle = THREE.MathUtils.radToDeg(angleRad);
-        } else {
-            bestAngle = Math.random() * 360;
-        }
+        } else { bestAngle = Math.random() * 360; }
 
-        // 4. Поиск безопасного сектора
         for (let i = 0; i < 16; i++) {
             let testAngle = bestAngle + (i * 22.5);
             check = canShoot(bases, startBase, testAngle, module);
@@ -116,13 +101,9 @@ export function playAITurn(gameContext) {
             }
         }
 
-        // 5. Выстрел / Постройка
         if (allowed && playerEnergy[currentPlayer] >= cost) {
             playerEnergy[currentPlayer] -= cost;
             if (gameContext.updateUI) gameContext.updateUI();
-
-            // КАМЕРА БОЛЬШЕ НЕ ПЕРЕМЕЩАЕТСЯ К БАЗЕ ИИ! 
-            // Она остается там, где ее оставил игрок.
 
             let power = ['relay', 'generator'].includes(module) ? 10 : 8;
 
@@ -135,8 +116,5 @@ export function playAITurn(gameContext) {
             setTimeout(onTurnEnd, 1000);
         }
     };
-
-    setTimeout(() => {
-        performAIAction();
-    }, 1500);
+    setTimeout(() => { performAIAction(); }, 1500);
 }
