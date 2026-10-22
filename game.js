@@ -21,8 +21,6 @@ let hasSpunThisTurn = false;
 let selectedModuleType = null; 
 let gameOver = false;
 let isAITurn = false;
-
-// БЛОКИРОВКА ВО ВРЕМЯ ПОЛЕТА
 let isShooting = false; 
 
 let currentCameraAzimuth = 0; 
@@ -54,7 +52,8 @@ export function updateCameraTilt() {
     let t = (dist - minDist) / (maxDist - minDist);
     t = Math.max(0, Math.min(1, t));
     
-    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t)); 
+    // ИСПРАВЛЕНО: Угол от 15 до 25 градусов (вместо 2), чтобы камера не заваливалась
+    const targetPhi = THREE.MathUtils.degToRad(15 + 10 * (1 - t)); 
     
     const offset = camera.position.clone().sub(target);
     const currentPhi = offset.angleTo(normal);
@@ -84,7 +83,9 @@ function centerCameraOnBase(base) {
     const maxDist = 20;
     let t = (currentDist - minDist) / (maxDist - minDist);
     t = Math.max(0, Math.min(1, t));
-    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t));
+    
+    // ИСПРАВЛЕНО: Тот же угол 15 градусов
+    const targetPhi = THREE.MathUtils.degToRad(15 + 10 * (1 - t));
 
     const offset = normal.clone().multiplyScalar(Math.cos(targetPhi) * currentDist)
                          .add(tangent.clone().multiplyScalar(Math.sin(targetPhi) * currentDist));
@@ -412,13 +413,20 @@ function setupRaycaster() {
     const mouse = new THREE.Vector2();
 
     window.addEventListener('pointerdown', (event) => {
-        if (isAITurn || gameOver || isShooting) return;
+        if (event.button !== 0) return; // Только ЛКМ
+        
+        // УБРАЛИ isShooting, чтобы клики работали всегда
+        if (isAITurn || gameOver) return;
+        
         if (event.target.closest('#bottom-panel') || event.target.closest('#ui-panel') || event.target.closest('#start-screen')) return;
 
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         mouse.y = (event.clientY / window.innerHeight) * 2 + 1;
 
+        camera.updateMatrixWorld();
+        scene.updateMatrixWorld();
         raycaster.setFromCamera(mouse, camera);
+        
         const baseMeshes = bases.filter(b => b.mesh.visible).map(b => b.mesh);
         const intersects = raycaster.intersectObjects(baseMeshes);
 
