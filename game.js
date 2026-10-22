@@ -52,7 +52,8 @@ export function updateCameraTilt() {
     let t = (dist - minDist) / (maxDist - minDist);
     t = Math.max(0, Math.min(1, t));
     
-    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t)); 
+    // УГОЛ ОТ 20 ДО 30 ГРАДУСОВ (Вместо 2, чтобы не было Gimbal Lock)
+    const targetPhi = THREE.MathUtils.degToRad(20 + 10 * (1 - t)); 
     
     const offset = camera.position.clone().sub(target);
     const currentPhi = offset.angleTo(normal);
@@ -77,7 +78,7 @@ function centerCameraOnBase(base) {
     if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
     let tangent = baseTangent.applyAxisAngle(normal, currentCameraAzimuth);
     
-    // ИСПРАВЛЕНО: Безопасный вектор верха, чтобы не ломался Raycaster
+    // БЕЗОПАСНЫЙ ВЕКТОР ВЕРХА
     let upVec = new THREE.Vector3().crossVectors(normal, tangent).normalize();
     camera.up.copy(upVec); 
     
@@ -85,7 +86,8 @@ function centerCameraOnBase(base) {
     const maxDist = 20;
     let t = (currentDist - minDist) / (maxDist - minDist);
     t = Math.max(0, Math.min(1, t));
-    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t));
+    // УГОЛ ОТ 20 ДО 30 ГРАДУСОВ
+    const targetPhi = THREE.MathUtils.degToRad(20 + 10 * (1 - t));
 
     const offset = normal.clone().multiplyScalar(Math.cos(targetPhi) * currentDist)
                          .add(tangent.clone().multiplyScalar(Math.sin(targetPhi) * currentDist));
@@ -281,9 +283,7 @@ function rotateCameraAroundTarget(angle) {
     const offset = camera.position.clone().sub(target);
     offset.applyAxisAngle(normal, angle);
     camera.position.copy(target).add(offset);
-    
-    camera.up.applyAxisAngle(normal, angle); // Теперь безопасно, т.к. up перпендикулярен
-    
+    camera.up.applyAxisAngle(normal, angle); // Теперь безопасно, т.к. up перпендикулярен нормали
     controls.update();
 }
 
@@ -457,9 +457,10 @@ function setupRaycaster() {
             updateArrowDirection();
             arrowHelper.visible = true;
         } else {
-            selectedBase = null;
-            uiElements.uiPanel.style.display = 'none';
-            arrowHelper.visible = false;
+            // НИЧЕГО НЕ ДЕЛАЕМ, ЕСЛИ КЛИКНУЛИ В ПУСТОТУ
+            // selectedBase = null;
+            // uiElements.uiPanel.style.display = 'none';
+            // arrowHelper.visible = false;
         }
     });
 }
