@@ -13,12 +13,13 @@ let powerInterval = null;
 let arrowHelper;
 
 let currentPlayer = 1;
-let totalPlayers = 2; 
-let playerEnergy = {}; 
-let playerGenerators = {}; 
-let hasSpunThisTurn = false; 
-let selectedModuleType = null; 
+let totalPlayers = 2;
+let playerEnergy = {};
+let playerGenerators = {};
+let hasSpunThisTurn = false;
+let selectedModuleType = null;
 let gameOver = false;
+let fogMat;
 
 export function initGame(_scene, _camera, _controls) {
     scene = _scene;
@@ -29,23 +30,97 @@ export function initGame(_scene, _camera, _controls) {
     arrowHelper.visible = false;
     scene.add(arrowHelper);
 
+    setupFogOfWar();
     setupEventListeners();
 }
 
-// УСТАНОВКА КАМЕРЫ БЕЗ GIMBAL LOCK
+// БЕЗОПАСНЫЙ НАКЛОН КАМЕРЫ (Без Gimbal Lock)
+export function updateCameraTilt() {
+    if (!selectedBase) return;
+    
+    const target = selectedBase.position;
+    const normal = target.clone().normalize();
+    
+    // Вычисляем безопасный "верх" камеры, чтобы она не смотрела ровно вниз
+    const lookDir = target.clone().sub(camera.position).normalize();
+    let right = new THREE.Vector3().crossVectors(lookDir, normal).normalize();
+    if (right.lengthSq() < 0.001) right = new THREE.Vector3(1, 0, 0).cross(lookDir).normalize();
+    camera.up.copy(new THREE.Vector3().crossVectors(right, lookDir).normalize());
+}
+
 function centerCameraOnBase(base) {
     const normal = base.position.clone().normalize();
-    
-    // Ставим камеру снаружи сферы, немного сбоку, чтобы избежать смотрения строго вниз
     const dist = 15;
     const tangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
     
+    // Ставим камеру снаружи, чтобы база была по центру
     camera.position.copy(base.position)
         .add(normal.clone().multiplyScalar(dist * 0.8))
         .add(tangent.clone().multiplyScalar(dist * 0.6));
         
     controls.target.copy(base.position);
     controls.update();
+}
+
+function setupFogOfWar() {
+    const fogGeo = new THREE.SphereGeometry(PLANET_RADIUS + 0.5, 64, 64);
+    fogMat = new THREE.ShaderMaterial({
+        uniforms: {
+            uSources: { value: Array(50).fill(null).map(() => new THREE.Vector4(0, 0, 0, -1)) },
+            uCount: { value: 0 }
+        },
+        vertexShader: `varying vec3 vPos; void main() { vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+        fragmentShader: `
+            varying vec3 vPos; uniform vec4 uSources[50]; uniform int uCount;
+            void main() {
+                vec3 normPos = normalize(vPos);
+                float alpha = 0.98;
+                for(int i = 0; i < 50; i++) {
+                    if(i >= uCount) break;
+                    vec3 src = normalize(uSources[i].xyz);
+                    float dist = distance(normPos, src);
+                    float localAlpha = smoothstep(uSources[i].w, uSources[i].w + 0.02, dist);
+                    alpha = min(alpha, localAlpha * 0.98);
+                }
+                gl_FragColor = vec4(0.0, 0.0, 0.0, alpha);
+            }
+        `,
+        transparent: true, depthWrite: false, depthTest: false
+    });
+    const fogMesh = new THREE.Mesh(fogGeo, fogMat);
+    fogMesh.renderOrder = 999;
+    scene.add(fogMesh);
+}
+
+export function updateFogOfWar() {
+    if (gameOver) return;
+    const myBases = bases.filter(b => b.owner === 1);
+    let count = 0;
+    for (let i = 0; i < myBases.length && i < 50; i++) {
+        let base = myBases[i];
+        let r = 2.0 / PLANET_RADIUS;
+        fogMat.uniforms.uSources.value[i].set(base.position.x, base.position.y, base.position.z, r);
+        count++;
+    }
+    fogMat.uniforms.uCount.value = count;
+
+    bases.forEach(base => {
+        if (base.owner === 1) {
+            base.mesh.visible = true;
+            if (base.lineMesh) base.lineMesh.visible = true;
+            if (base.domeMesh) base.domeMesh.visible = true;
+            if (base.healthSprite) base.healthSprite.visible = true;
+            return;
+        }
+        let inVision = false;
+        for (let ally of myBases) {
+            if (ally.position.distanceTo(base.position) < 2.0) { inVision = true; break; }
+        }
+        base.mesh.visible = inVision;
+        if (base.lineMesh) base.lineMesh.visible = inVision;
+        if (base.domeMesh) base.domeMesh.visible = inVision;
+        if (base.healthSprite) base.healthSprite.visible = inVision;
+    });
 }
 
 function setupEventListeners() {
@@ -81,7 +156,7 @@ function setupEventListeners() {
         hasSpunThisTurn = true;
         uiElements.spinBtn.disabled = true;
         uiElements.spinBtn.innerText = `+${rolled}`;
-        setTimeout(() => { uiElements.spinBtn.innerText = '⚡'; }, 1000); 
+        setTimeout(() => { uiElements.spinBtn.innerText = '⚡'; }, 1000);
         updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
     });
 
@@ -126,7 +201,7 @@ function setupEventListeners() {
             clearInterval(powerInterval);
             uiElements.powerBar.style.width = '0%';
             
-            if (power <= 0) power = 1; 
+            if (power <= 0) power = 1;
             const cost = selectedModuleType === 'bomb' || selectedModuleType === 'heal' || selectedModuleType === 'drone' ? 1 : (selectedModuleType === 'aao' || selectedModuleType === 'homing' ? 3 : 7);
             
             if (playerEnergy[currentPlayer] >= cost) {
@@ -135,10 +210,10 @@ function setupEventListeners() {
                     playerEnergy[currentPlayer] -= cost;
                     updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
                     
-                    executeShot(scene, bases, selectedBase, check.snappedAngle, power, selectedModuleType, playerGenerators, 
+                    executeShot(scene, bases, selectedBase, check.snappedAngle, power, selectedModuleType, playerGenerators,
                         (genCount) => alert(`Генератор! Выработка: ${5+genCount} - ${8+genCount}`),
                         (owner) => endGame(owner),
-                        () => {}
+                        () => { updateFogOfWar(); }
                     );
                 } else {
                     alert(check.reason);
@@ -159,6 +234,7 @@ function setupEventListeners() {
         arrowHelper.visible = false;
         uiElements.spinBtn.disabled = false;
         updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
+        updateFogOfWar();
 
         if (currentPlayer > 1) {
             uiElements.bottomPanel.style.pointerEvents = 'none';
@@ -190,7 +266,6 @@ function updateArrowDirection() {
 }
 
 function startGame() {
-    let positions = [];
     for (let p = 1; p <= totalPlayers; p++) {
         let pos = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(PLANET_RADIUS);
         const hub = new THREE.Mesh(getGeometry('hub'), new THREE.MeshBasicMaterial({ color: playerColors[p - 1] }));
@@ -203,7 +278,7 @@ function startGame() {
         
         if (p === 1) {
             selectedBase = baseObj;
-            centerCameraOnBase(selectedBase); 
+            centerCameraOnBase(selectedBase);
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(pos);
             updateArrowDirection();
@@ -212,6 +287,7 @@ function startGame() {
     }
     setupRaycaster();
     updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
+    updateFogOfWar();
 }
 
 function endTurn() {
@@ -224,6 +300,7 @@ function endTurn() {
     arrowHelper.visible = false;
     uiElements.spinBtn.disabled = false;
     updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
+    updateFogOfWar();
 
     if (currentPlayer > 1) {
         uiElements.bottomPanel.style.pointerEvents = 'none';
@@ -253,7 +330,6 @@ function setupRaycaster() {
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         mouse.y = (event.clientY / window.innerHeight) * 2 + 1;
 
-        // Принудительное обновление матрицы, чтобы клик всегда срабатывал
         camera.updateMatrixWorld();
         scene.updateMatrixWorld();
         raycaster.setFromCamera(mouse, camera);
@@ -270,7 +346,6 @@ function setupRaycaster() {
                     clickedBase.hp = Math.min(clickedBase.maxHp, clickedBase.hp + 25);
                     playerEnergy[currentPlayer] -= 1;
                     updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
-                    if(clickedBase.healthSprite) clickedBase.healthSprite.visible = true;
                 }
                 return;
             }
@@ -279,7 +354,7 @@ function setupRaycaster() {
             if (clickedBase.type !== 'hub' && clickedBase.type !== 'relay') return; 
 
             selectedBase = clickedBase;
-            centerCameraOnBase(selectedBase); 
+            centerCameraOnBase(selectedBase);
             
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(selectedBase.position);
