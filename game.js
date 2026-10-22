@@ -4,7 +4,6 @@ import { playAITurn } from './ai.js';
 import { uiElements, updateUI, clearSelection } from './ui.js';
 import { createPlanet } from './planet.js';
 
-// Экспортируем переменную для main.js
 export let isGameRunning = false;
 
 let scene, camera, controls;
@@ -28,7 +27,7 @@ let gameOver = false;
 let isAITurn = false;
 
 let currentCameraAzimuth = 0; 
-let fogMesh, fogCanvas, fogCtx, fogTexture;
+let fogMat, fogMesh;
 let currentPlanet = null;
 
 let cameraTargetPos = new THREE.Vector3();
@@ -132,31 +131,46 @@ export function updateCameraAnimation() {
     }
 }
 
+// ОПТИМИЗИРОВАННЫЙ ШЕЙДЕРНЫЙ ТУМАН
 function setupFogOfWar() {
-    fogCanvas = document.createElement('canvas');
-    fogCanvas.width = 1024;
-    fogCanvas.height = 512;
-    fogCtx = fogCanvas.getContext('2d');
+    // 64x64 полигонов достаточно для ровных краев
+    const fogGeo = new THREE.SphereGeometry(10.02, 64, 64); 
     
-    // Жестко заливаем черным при создании
-    fogCtx.fillStyle = '#000000';
-    fogCtx.fillRect(0, 0, 1024, 512);
-
-    fogTexture = new THREE.CanvasTexture(fogCanvas);
-    // ОПТИМИЗАЦИЯ И ФИКС АРТЕФАКТОВ:
-    fogTexture.generateMipmaps = false; 
-    fogTexture.minFilter = THREE.LinearFilter;
-    fogTexture.magFilter = THREE.LinearFilter;
-    fogTexture.wrapS = THREE.ClampToEdgeWrapping;
-    fogTexture.wrapT = THREE.ClampToEdgeWrapping;
-    
-    // Увеличили полигонаж сферы тумана, чтобы убрать "кубики" на краях
-    const fogGeo = new THREE.SphereGeometry(10.05, 64, 64); 
-    const fogMat = new THREE.MeshBasicMaterial({ 
-        map: fogTexture, 
+    fogMat = new THREE.ShaderMaterial({
+        uniforms: {
+            uSources: { value: Array(32).fill(null).map(() => new THREE.Vector4(0, 0, 0, -1)) }
+        },
+        vertexShader: `
+            varying vec3 vPos;
+            void main() {
+                vPos = position;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `,
+        fragmentShader: `
+            varying vec3 vPos;
+            uniform vec4 uSources[32];
+            void main() {
+                vec3 normPos = normalize(vPos);
+                float alpha = 1.0; // Базовая непрозрачность тумана
+                
+                for(int i = 0; i < 32; i++) {
+                    if (uSources[i].w > 0.0) {
+                        vec3 src = normalize(uSources[i].xyz);
+                        // Считаем расстояние между точками на сфере
+                        float dist = distance(normPos, src);
+                        
+                        // Плавный переход от видимости к туману
+                        float localAlpha = smoothstep(uSources[i].w, uSources[i].w + 0.03, dist);
+                        alpha = min(alpha, localAlpha);
+                    }
+                }
+                gl_FragColor = vec4(0.0, 0.0, 0.0, alpha); 
+            }
+        `,
         transparent: true, 
-        depthWrite: false,
-        color: 0xffffff // Базовый цвет белый, чтобы текстура (черная) отображалась как есть
+        depthWrite: false, 
+        depthTest: true
     });
     
     fogMesh = new THREE.Mesh(fogGeo, fogMat);
@@ -166,35 +180,19 @@ function setupFogOfWar() {
 
 export function updateFogOfWar() {
     if (gameOver) return;
-    
-    fogCtx.fillStyle = '#000000';
-    fogCtx.fillRect(0, 0, 1024, 512);
-    
-    fogCtx.globalCompositeOperation = 'destination-out';
-    
     const myBases = bases.filter(b => b.owner === 1);
     
-    myBases.forEach(base => {
-        const u = 0.5 + Math.atan2(-base.position.z, base.position.x) / (2 * Math.PI);
-        const v = 0.5 - Math.asin(base.position.y / PLANET_RADIUS) / Math.PI;
-        
-        const x = u * 1024;
-        const y = v * 512;
-        
-        const r = ((base.visionRadius || VISION_RADIUS) / (Math.PI * PLANET_RADIUS)) * 1024 * 1.5;
-        
-        const gradient = fogCtx.createRadialGradient(x, y, r * 0.5, x, y, r);
-        gradient.addColorStop(0, 'rgba(0,0,0,1)');
-        gradient.addColorStop(1, 'rgba(0,0,0,0)');
-        
-        fogCtx.fillStyle = gradient;
-        fogCtx.beginPath();
-        fogCtx.arc(x, y, r, 0, Math.PI * 2);
-        fogCtx.fill();
-    });
+    // Очищаем все 32 слота перед заполнением
+    for (let i = 0; i < 32; i++) {
+        fogMat.uniforms.uSources.value[i].set(0, 0, 0, -1);
+    }
     
-    fogCtx.globalCompositeOperation = 'source-over';
-    fogTexture.needsUpdate = true;
+    // Заполняем позициями наших баз
+    for (let i = 0; i < myBases.length && i < 32; i++) {
+        let base = myBases[i];
+        let r = (base.visionRadius || VISION_RADIUS) / PLANET_RADIUS; 
+        fogMat.uniforms.uSources.value[i].set(base.position.x, base.position.y, base.position.z, r);
+    }
 
     bases.forEach(base => {
         if (base.owner === 1) {
@@ -478,7 +476,7 @@ function endGame(owner) {
 }
 
 function startGame() {
-    isGameRunning = true; // Включаем рендер
+    isGameRunning = true; 
 
     const sizeFactor = parseFloat(document.getElementById('planet-size').value);
     const newRadius = 10 * sizeFactor;
