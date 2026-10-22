@@ -4,8 +4,6 @@ import { playAITurn } from './ai.js';
 import { uiElements, updateUI, clearSelection } from './ui.js';
 import { createPlanet } from './planet.js';
 
-export let isGameRunning = false;
-
 let scene, camera, controls;
 let bases = [];
 let selectedBase = null;
@@ -469,7 +467,8 @@ function endGame(owner) {
 }
 
 function startGame() {
-    isGameRunning = true; 
+    // ОТПРАВЛЯЕМ СИГНАЛ ДЛЯ ЗАПУСКА РЕНДЕРА В MAIN.JS
+    window.dispatchEvent(new Event('startGameRender'));
 
     const sizeFactor = parseFloat(document.getElementById('planet-size').value);
     const newRadius = 10 * sizeFactor;
@@ -559,7 +558,6 @@ function setupRaycaster() {
             const clickedMesh = intersects[0].object;
             const clickedBase = bases.find(b => b.mesh === clickedMesh);
             
-            // ИСПРАВЛЕНИЕ: Лечение
             if (selectedModuleType === 'heal') {
                 if (clickedBase.owner !== currentPlayer) {
                     window.showMessage("ОШИБКА", "Это не ваша база!");
@@ -574,11 +572,9 @@ function setupRaycaster() {
                     return;
                 }
 
-                // Лечим
                 clickedBase.hp = Math.min(clickedBase.maxHp, clickedBase.hp + 25);
                 playerEnergy[currentPlayer] -= 1;
                 
-                // Обновляем интерфейс и шкалу ХП
                 updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
                 updateHealthBar(clickedBase);
                 
