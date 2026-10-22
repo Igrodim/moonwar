@@ -33,86 +33,51 @@ export function initGame(_scene, _camera, _controls) {
     arrowHelper.visible = false;
     scene.add(arrowHelper);
 
+    // ДИНАМИЧЕСКИЙ УГОЛ ПРИ ЗУМЕ
+    controls.addEventListener('change', () => {
+        if (!selectedBase) return;
+        const dist = camera.position.distanceTo(controls.target);
+        const minDist = 1.5;
+        const maxDist = 15; 
+        
+        let t = (dist - minDist) / (maxDist - minDist);
+        t = Math.max(0, Math.min(1, t));
+        
+        // 25 градусов (65 от поверхности) вблизи, 0 градусов (90 от поверхности) вдали
+        const targetPhi = (25 * Math.PI / 180) * (1 - t);
+        
+        if (Math.abs(controls.minPolarAngle - targetPhi) > 0.001) {
+            controls.minPolarAngle = targetPhi;
+            controls.maxPolarAngle = targetPhi;
+        }
+    });
+
     setupFogOfWar();
     setupEventListeners();
 }
 
-function setupFogOfWar() {
-    const fogGeo = new THREE.SphereGeometry(PLANET_RADIUS + 0.5, 64, 64);
+// ИНИЦИАЛИЗАЦИЯ КАМЕРЫ ПРИ ВЫБОРЕ БАЗЫ
+function centerCameraOnBase(base) {
+    const normal = base.position.clone().normalize();
     
-    fogMat = new THREE.ShaderMaterial({
-        uniforms: {
-            uSources: { value: Array(50).fill(null).map(() => new THREE.Vector4(0, 0, 0, -1)) },
-            uCount: { value: 0 }
-        },
-        vertexShader: `
-            varying vec3 vPos;
-            void main() {
-                vPos = position;
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-        `,
-        fragmentShader: `
-            varying vec3 vPos;
-            uniform vec4 uSources[50];
-            uniform int uCount;
-            void main() {
-                vec3 normPos = normalize(vPos);
-                float alpha = 0.98; 
-                
-                for(int i = 0; i < 50; i++) {
-                    if(i >= uCount) break;
-                    vec3 src = normalize(uSources[i].xyz);
-                    float dist = distance(normPos, src);
-                    
-                    float localAlpha = smoothstep(uSources[i].w, uSources[i].w + 0.02, dist);
-                    alpha = min(alpha, localAlpha * 0.98);
-                }
-                gl_FragColor = vec4(0.0, 0.0, 0.0, alpha); 
-            }
-        `,
-        transparent: true,
-        depthWrite: false,
-        depthTest: false
-    });
+    // Привязываем верх камеры к нормали базы
+    camera.up.copy(normal);
     
-    const fogMesh = new THRimport { PLANET_RADIUS, playerColors, getGeometry, layFlatOnSphere, VISION_RADIUS } from './entities.js';
-import { executeShot, canShoot } from './combat.js';
-import { playAITurn } from './ai.js';
-import { uiElements, updateUI, clearSelection } from './ui.js';
+    // Ставим камеру на расстоянии 12 единиц (далеко, значит вид 90 градусов)
+    camera.position.copy(base.position).add(normal.clone().multiplyScalar(12));
+    controls.target.copy(base.position);
+    
+    // Настраиваем углы для этой дистанции
+    const dist = 12;
+    const minDist = 1.5;
+    const maxDist = 15;
+    let t = (dist - minDist) / (maxDist - minDist);
+    t = Math.max(0, Math.min(1, t));
+    const targetPhi = (25 * Math.PI / 180) * (1 - t);
+    controls.minPolarAngle = targetPhi;
+    controls.maxPolarAngle = targetPhi;
 
-let scene, camera, controls;
-let bases = [];
-let selectedBase = null;
-let currentAngle = 0;
-let isCharging = false;
-let power = 0;
-let powerInterval = null;
-const maxPower = 10;
-let arrowHelper;
-
-let currentPlayer = 1;
-let totalPlayers = 2; 
-let playerEnergy = {}; 
-let playerGenerators = {}; 
-let hasSpunThisTurn = false; 
-let selectedModuleType = null; 
-let gameOver = false;
-let isAITurn = false;
-
-let fogMat;
-
-export function initGame(_scene, _camera, _controls) {
-    scene = _scene;
-    camera = _camera;
-    controls = _controls;
-
-    arrowHelper = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), 0.6, 0xffff00, 0.15, 0.1);
-    arrowHelper.visible = false;
-    scene.add(arrowHelper);
-
-    setupFogOfWar();
-    setupEventListeners();
+    controls.update();
 }
 
 function setupFogOfWar() {
@@ -198,7 +163,6 @@ export function updateFogOfWar() {
 }
 
 function setupEventListeners() {
-    // Вращение с клавиатуры
     window.addEventListener('keydown', (e) => {
         if (isAITurn || gameOver || !selectedBase) return;
         const key = e.key.toLowerCase();
@@ -209,7 +173,6 @@ function setupEventListeners() {
         }
     });
 
-    // Вращение с новых кнопок UI
     uiElements.rotateLeft.addEventListener('click', () => {
         if (isAITurn || gameOver || !selectedBase) return;
         rotateCameraAroundTarget(-Math.PI / 18);
@@ -316,14 +279,12 @@ function rotateCameraAroundTarget(angle) {
     const target = selectedBase.position;
     const normal = target.clone().normalize(); 
     
-    // Вращаем позицию камеры
+    // Вращаем позицию камеры вокруг нормали
     const offset = camera.position.clone().sub(target);
     offset.applyAxisAngle(normal, angle);
     camera.position.copy(target).add(offset);
     
-    // Вращаем вектор "верха" камеры, чтобы горизонт не кренился
-    camera.up.applyAxisAngle(normal, angle);
-    
+    // Вектор camera.up НЕ трогаем, он уже смотрит по нормали
     controls.update();
 }
 
@@ -431,11 +392,8 @@ function startGame() {
         bases.push(baseObj);
         
         if (p === 1) {
-            camera.position.copy(pos.clone().normalize().multiplyScalar(PLANET_RADIUS + 10));
-            controls.target.copy(pos);
-            camera.up.copy(pos.clone().normalize()); // Ставим верх ровно по нормали базы
-            controls.update();
             selectedBase = baseObj;
+            centerCameraOnBase(selectedBase); 
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(pos);
             currentAngle = 0;
@@ -483,9 +441,7 @@ function setupRaycaster() {
             if (clickedBase.type !== 'hub' && clickedBase.type !== 'relay') { alert("С этого модуля нельзя стрелять!"); return; }
 
             selectedBase = clickedBase;
-            controls.target.copy(selectedBase.position);
-            camera.up.copy(selectedBase.position.clone().normalize()); // Выравниваем камеру под новую базу
-            controls.update();
+            centerCameraOnBase(selectedBase); 
             
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(selectedBase.position);
