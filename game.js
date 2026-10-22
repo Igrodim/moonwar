@@ -21,6 +21,8 @@ let hasSpunThisTurn = false;
 let selectedModuleType = null; 
 let gameOver = false;
 let isAITurn = false;
+
+// БЛОКИРОВКА ВО ВРЕМЯ ПОЛЕТА
 let isShooting = false; 
 
 let currentCameraAzimuth = 0; 
@@ -52,8 +54,7 @@ export function updateCameraTilt() {
     let t = (dist - minDist) / (maxDist - minDist);
     t = Math.max(0, Math.min(1, t));
     
-    // УГОЛ ОТ 20 ДО 30 ГРАДУСОВ (вместо 2), чтобы не было Gimbal Lock
-    const targetPhi = THREE.MathUtils.degToRad(20 + 10 * (1 - t)); 
+    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t)); 
     
     const offset = camera.position.clone().sub(target);
     const currentPhi = offset.angleTo(normal);
@@ -74,9 +75,7 @@ function centerCameraOnBase(base) {
         currentDist = 20; 
     }
 
-    // ВОЗВРАЩАЕМ ВЕКТОР ВЕРХА НА МЕСТО
     camera.up.copy(normal); 
-    
     let baseTangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
     if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
     let tangent = baseTangent.applyAxisAngle(normal, currentCameraAzimuth);
@@ -85,9 +84,7 @@ function centerCameraOnBase(base) {
     const maxDist = 20;
     let t = (currentDist - minDist) / (maxDist - minDist);
     t = Math.max(0, Math.min(1, t));
-    
-    // УГОЛ ОТ 20 ДО 30 ГРАДУСОВ
-    const targetPhi = THREE.MathUtils.degToRad(20 + 10 * (1 - t));
+    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t));
 
     const offset = normal.clone().multiplyScalar(Math.cos(targetPhi) * currentDist)
                          .add(tangent.clone().multiplyScalar(Math.sin(targetPhi) * currentDist));
@@ -283,10 +280,7 @@ function rotateCameraAroundTarget(angle) {
     const offset = camera.position.clone().sub(target);
     offset.applyAxisAngle(normal, angle);
     camera.position.copy(target).add(offset);
-    
-    // ВОЗВРАЩАЕМ ПОВОРОТ ВЕКТОРА ВЕРХА
     camera.up.applyAxisAngle(normal, angle);
-    
     controls.update();
 }
 
@@ -418,19 +412,13 @@ function setupRaycaster() {
     const mouse = new THREE.Vector2();
 
     window.addEventListener('pointerdown', (event) => {
-        if (event.button !== 0) return; // Только ЛКМ
-        
-        if (isAITurn || gameOver) return;
+        if (isAITurn || gameOver || isShooting) return;
         if (event.target.closest('#bottom-panel') || event.target.closest('#ui-panel') || event.target.closest('#start-screen')) return;
 
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         mouse.y = (event.clientY / window.innerHeight) * 2 + 1;
 
-        // Обновляем матрицу, чтобы клики всегда проходили
-        camera.updateMatrixWorld();
-        scene.updateMatrixWorld();
         raycaster.setFromCamera(mouse, camera);
-        
         const baseMeshes = bases.filter(b => b.mesh.visible).map(b => b.mesh);
         const intersects = raycaster.intersectObjects(baseMeshes);
 
