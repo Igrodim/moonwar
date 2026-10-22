@@ -14,14 +14,15 @@ export function canShoot(bases, startBase, angle, moduleToBuild) {
     return { allowed: true, snappedAngle: snappedAngle, sector: sector };
 }
 
-export function executeShot(scene, bases, startBase, angle, powerValue, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver, onComplete) {
+export function executeShot(scene, bases, startBase, angle, powerValue, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver, onComplete, playerId, VISION_RADIUS) {
     const normal = startBase.position.clone().normalize();
     let baseVector = new THREE.Vector3(1, 0, 0);
     if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
     let tangent = baseVector.cross(normal).normalize();
     tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(angle));
     
-    const distance = powerValue * 0.15;
+    // ЗАЗОР 0.3, чтобы модули не наслаивались
+    const distance = 0.3 + powerValue * 0.15;
     const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(distance)).normalize().multiplyScalar(PLANET_RADIUS);
 
     let projectileColor = 0xffaa00;
@@ -43,6 +44,19 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
         let t = elapsed / duration;
         
         if (t <= 1) {
+            if (startBase.owner !== 1) {
+                let visible = false;
+                for (let b of bases) {
+                    if (b.owner === 1 && b.position.distanceTo(projectile.position) < (b.visionRadius || VISION_RADIUS)) {
+                        visible = true;
+                        break;
+                    }
+                }
+                projectile.visible = visible;
+            } else {
+                projectile.visible = true;
+            }
+
             for (let b of bases) {
                 if (b.type === 'aao' && b.isActive && b.owner !== startBase.owner) {
                     if (b.position.distanceTo(projectile.position) < AAO_RADIUS) {
@@ -70,7 +84,7 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
     animateFlight();
 }
 
-export function checkLineIntersection(bases, startPos, endPos) {
+export function checkLineIntersection(bases, startPos, endPos, parentBase) {
     const midPoint = startPos.clone().lerp(endPos, 0.5);
     const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + 0.3);
     const newCurve = new THREE.QuadraticBezierCurve3(startPos, controlPoint, endPos);
@@ -78,10 +92,12 @@ export function checkLineIntersection(bases, startPos, endPos) {
 
     for (let b of bases) {
         if (!b.parent || !b.curve) continue; 
+        if (b.parent === parentBase) continue; 
+        
         const existingPoints = b.curve.getPoints(15);
         for (let p1 of newPoints) {
             for (let p2 of existingPoints) {
-                if (p1.distanceTo(p2) < 0.12) return true;
+                if (p1.distanceTo(p2) < 0.05) return true;
             }
         }
     }
@@ -105,7 +121,7 @@ function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, secto
     if (moduleToBuild === 'bomb') { explode(scene, bases, targetPos, 25, 0.10, null, onGameOver); return; }
     if (moduleToBuild === 'homing') { explode(scene, bases, targetPos, 50, 0.20, null, onGameOver); return; }
 
-    if (checkLineIntersection(bases, parentBase.position, targetPos)) {
+    if (checkLineIntersection(bases, parentBase.position, targetPos, parentBase)) {
         explode(scene, bases, targetPos, 25, 0.30, null, onGameOver); 
         return;
     }
