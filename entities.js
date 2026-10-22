@@ -1,6 +1,5 @@
 export const PLANET_RADIUS = 10;
 export const BASE_HEIGHT = 0.1;
-export const VISION_RADIUS = 2.0;
 
 export const playerColors = [];
 for (let i = 0; i < 32; i++) {
@@ -27,15 +26,12 @@ export function createHealthBar(scene, base) {
     canvas.width = 128;
     canvas.height = 32;
     const ctx = canvas.getContext('2d');
-    
     const tex = new THREE.CanvasTexture(canvas);
     const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(0.24, 0.06, 1);
-    
     const normal = base.position.clone().normalize();
     sprite.position.copy(base.position).add(normal.clone().multiplyScalar(0.2));
-    
     base.healthSprite = sprite;
     base.healthCtx = ctx;
     base.healthTex = tex;
@@ -60,68 +56,32 @@ export function updateHealthBar(base) {
     base.healthTex.needsUpdate = true;
 }
 
-export function createEnergyLine(scene, startPos, endPos, owner) {
-    const midPoint = startPos.clone().lerp(endPos, 0.5);
-    const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + 0.3);
-    const curve = new THREE.QuadraticBezierCurve3(startPos, controlPoint, endPos);
-    
-    const tubeGeometry = new THREE.TubeGeometry(curve, 20, 0.008, 8, false);
-    const tubeMaterial = new THREE.MeshBasicMaterial({ color: playerColors[owner - 1] });
-    const tube = new THREE.Mesh(tubeGeometry, tubeMaterial);
-    scene.add(tube);
-    return { tube, curve };
-}
-
-export function createNewBase(scene, bases, pos, parentBase, moduleType, angle, playerGenerators, onGeneratorBuilt) {
+export function createNewBase(scene, bases, pos, parentBase, moduleType, angle) {
     let newBaseColor = playerColors[parentBase.owner - 1];
     if (moduleType === 'generator') newBaseColor = 0x00ff00;
     if (moduleType === 'dome') newBaseColor = 0xffff00;
     if (moduleType === 'aao') newBaseColor = 0xff00ff;
-    if (moduleType === 'drone') newBaseColor = 0x00ffff;
 
     const newBase = new THREE.Mesh(getGeometry(moduleType), new THREE.MeshBasicMaterial({ color: newBaseColor }));
     layFlatOnSphere(newBase, pos);
     scene.add(newBase);
-    
-    const lineData = createEnergyLine(scene, parentBase.position, pos, parentBase.owner);
 
     const baseObj = { 
         mesh: newBase, position: pos.clone(), owner: parentBase.owner, hp: 100, maxHp: 100,
-        type: moduleType, parent: parentBase, angle: angle, lineMesh: lineData.tube, aimAngle: angle
+        type: moduleType, parent: parentBase, angle: angle, aimAngle: angle
     };
     
     bases.push(baseObj);
     createHealthBar(scene, baseObj);
-
-    if (moduleType === 'generator') {
-        playerGenerators[parentBase.owner]++;
-        if (parentBase.owner === 1 && onGeneratorBuilt) onGeneratorBuilt(playerGenerators[1]);
-    }
-    
-    if (moduleType === 'dome') {
-        const domeGeo = new THREE.SphereGeometry(0.35, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2);
-        const domeMat = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
-        const domeMesh = new THREE.Mesh(domeGeo, domeMat);
-        const normal = pos.clone().normalize();
-        domeMesh.position.copy(normal.clone().multiplyScalar(PLANET_RADIUS + (BASE_HEIGHT / 2)));
-        domeMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
-        scene.add(domeMesh);
-        baseObj.domeMesh = domeMesh;
-    }
     return baseObj;
 }
 
 export function destroyBaseAndChain(scene, bases, base, onGameOver) {
     const children = bases.filter(b => b.parent === base);
     children.forEach(child => destroyBaseAndChain(scene, bases, child, onGameOver));
-
     scene.remove(base.mesh);
-    if (base.lineMesh) scene.remove(base.lineMesh);
-    if (base.domeMesh) scene.remove(base.domeMesh);
     if (base.healthSprite) scene.remove(base.healthSprite);
-    
     const index = bases.indexOf(base);
     if (index > -1) bases.splice(index, 1);
-
     if (base.type === 'hub' && onGameOver) onGameOver(base.owner);
 }
