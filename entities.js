@@ -66,8 +66,13 @@ export function createNewBase(scene, bases, pos, parentBase, moduleType, angle) 
     layFlatOnSphere(newBase, pos);
     scene.add(newBase);
 
+    // Невидимый хитбокс для легкого клика
+    const hitArea = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), new THREE.MeshBasicMaterial({ visible: false }));
+    hitArea.position.copy(pos);
+    scene.add(hitArea);
+
     const baseObj = { 
-        mesh: newBase, position: pos.clone(), owner: parentBase.owner, hp: 100, maxHp: 100,
+        mesh: newBase, hitArea: hitArea, position: pos.clone(), owner: parentBase.owner, hp: 100, maxHp: 100,
         type: moduleType, parent: parentBase, angle: angle, aimAngle: angle
     };
     
@@ -80,6 +85,7 @@ export function destroyBaseAndChain(scene, bases, base, onGameOver) {
     const children = bases.filter(b => b.parent === base);
     children.forEach(child => destroyBaseAndChain(scene, bases, child, onGameOver));
     scene.remove(base.mesh);
+    if (base.hitArea) scene.remove(base.hitArea);
     if (base.healthSprite) scene.remove(base.healthSprite);
     const index = bases.indexOf(base);
     if (index > -1) bases.splice(index, 1);
