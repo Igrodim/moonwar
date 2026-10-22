@@ -25,11 +25,9 @@ let gameOver = false;
 let isAITurn = false;
 
 let currentCameraAzimuth = 0; 
-let fogMat;
-let fogMesh;
+let fogMesh, fogCanvas, fogCtx, fogTexture;
 let currentPlanet = null;
 
-// Переменные для плавного перелета
 let cameraTargetPos = new THREE.Vector3();
 let cameraTargetLookAt = new THREE.Vector3();
 let cameraTargetUp = new THREE.Vector3();
@@ -107,7 +105,6 @@ function smoothCenterCameraOnBase(base) {
     cameraTargetLookAt.copy(base.position);
     cameraTargetUp.copy(normal); 
     
-    // Запоминаем стартовую точку для анимации
     cameraMoveStartPos.copy(camera.position);
     cameraMoveStartTarget.copy(controls.target);
     cameraMoveStartUp.copy(camera.up);
@@ -118,14 +115,12 @@ function smoothCenterCameraOnBase(base) {
 
 export function updateCameraAnimation() {
     if (isCameraMoving) {
-        // Жесткий таймер анимации, чтобы камера никогда не застревала
         cameraMoveProgress += 0.08; 
         if (cameraMoveProgress >= 1) {
             cameraMoveProgress = 1;
             isCameraMoving = false;
         }
         
-        // Плавная кривая (smoothstep)
         let t = cameraMoveProgress * cameraMoveProgress * (3 - 2 * cameraMoveProgress);
         
         camera.position.lerpVectors(cameraMoveStartPos, cameraTargetPos, t);
@@ -134,41 +129,24 @@ export function updateCameraAnimation() {
     }
 }
 
+// ОПТИМИЗИРОВАННЫЙ ТУМАН ВОЙНЫ (Без тяжелых шейдеров)
 function setupFogOfWar() {
-    // ОПТИМИЗАЦИЯ: Уменьшили полигонаж сферы тумана (64х64 -> 32х32)
-    const fogGeo = new THREE.SphereGeometry(10.02, 32, 32); 
+    fogCanvas = document.createElement('canvas');
+    fogCanvas.width = 1024;
+    fogCanvas.height = 512;
+    fogCtx = fogCanvas.getContext('2d');
     
-    fogMat = new THREE.ShaderMaterial({
-        uniforms: {
-            uSources: { value: Array(50).fill(null).map(() => new THREE.Vector4(0, 0, 0, -1)) }
-        },
-        vertexShader: `
-            varying vec3 vPos;
-            void main() {
-                vPos = position;
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-        `,
-        fragmentShader: `
-            varying vec3 vPos;
-            uniform vec4 uSources[50];
-            void main() {
-                vec3 normPos = normalize(vPos);
-                float alpha = 0.98; 
-                // ОПТИМИЗАЦИЯ: Убрали break и uCount, используем w > 0
-                for(int i = 0; i < 50; i++) {
-                    vec4 srcData = uSources[i];
-                    if (srcData.w > 0.0) {
-                        float dist = distance(normPos, normalize(srcData.xyz));
-                        float localAlpha = smoothstep(srcData.w, srcData.w + 0.02, dist);
-                        alpha = min(alpha, localAlpha * 0.98);
-                    }
-                }
-                gl_FragColor = vec4(0.0, 0.0, 0.0, alpha); 
-            }
-        `,
-        transparent: true, depthWrite: false, depthTest: false
+    fogTexture = new THREE.CanvasTexture(fogCanvas);
+    
+    // Создаем простую сферу с этой текстурой
+    const fogGeo = new THREE.SphereGeometry(10.01, 32, 32); 
+    const fogMat = new THREE.MeshBasicMaterial({ 
+        map: fogTexture, 
+        transparent: true, 
+        depthWrite: false, 
+        opacity: 1 
     });
+    
     fogMesh = new THREE.Mesh(fogGeo, fogMat);
     fogMesh.renderOrder = 999;
     scene.add(fogMesh);
@@ -176,20 +154,43 @@ function setupFogOfWar() {
 
 export function updateFogOfWar() {
     if (gameOver) return;
+    
+    // Заливаем весь холст черным цветом
+    fogCtx.fillStyle = '#000000';
+    fogCtx.fillRect(0, 0, 1024, 512);
+    
+    // Включаем режим "стирания" (делаем дырки в тумане)
+    fogCtx.globalCompositeOperation = 'destination-out';
+    
     const myBases = bases.filter(b => b.owner === 1);
     
-    // Очищаем все слоты
-    for (let i = 0; i < 50; i++) {
-        fogMat.uniforms.uSources.value[i].set(0, 0, 0, -1);
-    }
+    myBases.forEach(base => {
+        // Перевод 3D координат в 2D UV координаты текстуры
+        const u = 0.5 + Math.atan2(-base.position.z, base.position.x) / (2 * Math.PI);
+        const v = 0.5 - Math.asin(base.position.y / PLANET_RADIUS) / Math.PI;
+        
+        const x = u * 1024;
+        const y = v * 512;
+        
+        // Радиус обзора (в пикселях текстуры)
+        const r = ((base.visionRadius || VISION_RADIUS) / (Math.PI * PLANET_RADIUS)) * 1024 * 1.5;
+        
+        // Рисуем размытый круг (градиент)
+        const gradient = fogCtx.createRadialGradient(x, y, r * 0.5, x, y, r);
+        gradient.addColorStop(0, 'rgba(0,0,0,1)'); // Полностью стираем
+        gradient.addColorStop(1, 'rgba(0,0,0,0)'); // Края плавно переходят в туман
+        
+        fogCtx.fillStyle = gradient;
+        fogCtx.beginPath();
+        fogCtx.arc(x, y, r, 0, Math.PI * 2);
+        fogCtx.fill();
+    });
     
-    // Заполняем активные базы
-    for (let i = 0; i < myBases.length && i < 50; i++) {
-        let base = myBases[i];
-        let r = (base.visionRadius || VISION_RADIUS) / PLANET_RADIUS; 
-        fogMat.uniforms.uSources.value[i].set(base.position.x, base.position.y, base.position.z, r);
-    }
+    // Возвращаем обычный режим рисования
+    fogCtx.globalCompositeOperation = 'source-over';
+    fogTexture.needsUpdate = true;
 
+    // Логика видимости баз
     bases.forEach(base => {
         if (base.owner === 1) {
             base.mesh.visible = true;
@@ -349,7 +350,6 @@ function setupEventListeners() {
     });
 }
 
-// ОПТИМИЗИРОВАННОЕ ВРАЩЕНИЕ (работает даже во время перелета)
 function rotateCameraAroundTarget(angle) {
     if (!selectedBase) return;
     
@@ -358,13 +358,11 @@ function rotateCameraAroundTarget(angle) {
     const target = selectedBase.position;
     const normal = target.clone().normalize();
 
-    // Вращаем текущую камеру
     const offset = camera.position.clone().sub(target);
     offset.applyAxisAngle(normal, angle);
     camera.position.copy(target).add(offset);
     camera.up.applyAxisAngle(normal, angle);
     
-    // Если идет перелет, вращаем и точку назначения
     if (isCameraMoving) {
         const targetOffset = cameraTargetPos.clone().sub(target);
         targetOffset.applyAxisAngle(normal, angle);
@@ -481,7 +479,6 @@ function startGame() {
 
     if (currentPlanet) {
         scene.remove(currentPlanet.globe);
-        scene.remove(currentPlanet.gridGlobe);
     }
     currentPlanet = createPlanet(scene, newRadius);
 
