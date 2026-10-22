@@ -114,11 +114,28 @@
         }
 
         .menu-card p {
-            color: #88aaff; font-size: 18px; letter-spacing: 2px; margin-bottom: 30px;
+            color: #88aaff; font-size: 18px; letter-spacing: 2px; margin-bottom: 40px;
+        }
+
+        /* --- БЛОК ДЛЯ ВЫБОРА ИГРОКОВ --- */
+        .ai-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 40px;
+        }
+
+        .ai-label {
+            color: #88aaff;
+            font-size: 14px;
+            letter-spacing: 3px;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            text-shadow: 0 0 5px rgba(0, 170, 255, 0.5);
         }
 
         .ai-selector {
-            display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 40px;
+            display: flex; align-items: center; justify-content: center; gap: 15px;
         }
 
         .ai-btn {
@@ -164,10 +181,13 @@
             <h1>MOONWAR 3D</h1>
             <p>КОСМИЧЕСКАЯ ТАКТИЧЕСКАЯ СТРАТЕГИЯ</p>
             
-            <div class="ai-selector">
-                <button class="ai-btn" onclick="changeAI(-1)">-</button>
-                <input type="number" id="ai-count" value="1" min="1" max="31" readonly>
-                <button class="ai-btn" onclick="changeAI(1)">+</button>
+            <div class="ai-section">
+                <div class="ai-label">Количество игроков</div>
+                <div class="ai-selector">
+                    <button class="ai-btn" onclick="changeAI(-1)">-</button>
+                    <input type="number" id="ai-count" value="1" min="1" max="31" readonly>
+                    <button class="ai-btn" onclick="changeAI(1)">+</button>
+                </div>
             </div>
             
             <button id="start-btn">НАЧАТЬ ИГРУ</button>
