@@ -26,7 +26,7 @@ window.addEventListener('resize', () => {
 
 function animate() {
     requestAnimationFrame(animate);
-    updateCamera(); // Вызываем нашу безопасную камеру
+    updateCamera(); // Наша полностью ручная безопасная камера
     renderer.render(scene, camera);
 }
 animate();
