@@ -412,13 +412,26 @@ function setupRaycaster() {
     const mouse = new THREE.Vector2();
 
     window.addEventListener('pointerdown', (event) => {
-        if (isAITurn || gameOver || isShooting) return;
+        if (event.button !== 0) return; // Только ЛКМ
+
+        // СБРАСЫВАЕМ ЗАЛИПШИЙ ФЛАГ, ЕСЛИ ОН ЕСТЬ
+        if (isShooting) {
+            isShooting = false;
+            uiElements.fireBtn.disabled = false;
+            uiElements.fireBtn.innerText = "ЗАЖМИ ДЛЯ ВЫСТРЕЛА";
+        }
+
+        if (isAITurn || gameOver) return;
         if (event.target.closest('#bottom-panel') || event.target.closest('#ui-panel') || event.target.closest('#start-screen')) return;
 
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         mouse.y = (event.clientY / window.innerHeight) * 2 + 1;
 
+        // ОБЯЗАТЕЛЬНО ОБНОВЛЯЕМ МАТРИЦУ, ЧТОБЫ ЛУЧ ПОПАЛ В БАЗУ
+        camera.updateMatrixWorld();
+        scene.updateMatrixWorld();
         raycaster.setFromCamera(mouse, camera);
+        
         const baseMeshes = bases.filter(b => b.mesh.visible).map(b => b.mesh);
         const intersects = raycaster.intersectObjects(baseMeshes);
 
