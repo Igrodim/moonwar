@@ -1,47 +1,61 @@
-import { PLANET_RADIUS, createNewBase, destroyBaseAndChain, updateHealthBar } from './entities.js';
+import { PLANET_RADIUS, AAO_RADIUS, createNewBase, destroyBaseAndChain } from './entities.js'; // AAO_RADIUS нужно добавить в entities.js
 
 export function canShoot(bases, startBase, angle, moduleToBuild) {
-    const finalAngle = Math.round(angle / 11.25) * 11.25 % 360;
-    const isBuildingModule = ['relay', 'dome', 'generator', 'aao', 'drone'].includes(moduleToBuild);
-    
+    const ANGLE_STEP = 22.5;
+    const snappedAngle = Math.round(angle / ANGLE_STEP) * ANGLE_STEP;
+    let sector = Math.round(snappedAngle / ANGLE_STEP) % 16;
+    if (sector < 0) sector += 16; 
+
+    const isBuildingModule = ['relay', 'dome', 'generator', 'aao'].includes(moduleToBuild);
     if (isBuildingModule) {
-        const children = bases.filter(b => b.parent === startBase);
-        for (let child of children) {
-            let diff = Math.abs(child.angle - finalAngle);
-            if (diff > 180) diff = 360 - diff;
-            if (diff < 7) return { allowed: false, reason: "Слишком близко к другому модулю!" };
-        }
+        const existingBuild = bases.find(b => b.parent === startBase && b.sector === sector);
+        if (existingBuild) return { allowed: false, reason: "В этом направлении уже построен модуль!" };
     }
-    return { allowed: true, snappedAngle: finalAngle };
+    return { allowed: true, snappedAngle: snappedAngle, sector: sector };
 }
 
-export function executeShot(scene, bases, startBase, angle, powerValue, moduleToBuild, onGameOver, onComplete) {
+export function executeShot(scene, bases, startBase, angle, powerValue, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver, onComplete) {
     const normal = startBase.position.clone().normalize();
     let baseVector = new THREE.Vector3(1, 0, 0);
     if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
     let tangent = baseVector.cross(normal).normalize();
     tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(angle));
     
-    const distance = 0.3 + powerValue * 0.15;
+    const distance = powerValue * 0.15;
     const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(distance)).normalize().multiplyScalar(PLANET_RADIUS);
 
-    let color = 0xffaa00;
-    if (moduleToBuild === 'bomb') color = 0xff0000;
-    if (moduleToBuild === 'homing') color = 0xff00ff;
+    let projectileColor = 0xffaa00;
+    if (moduleToBuild === 'bomb') projectileColor = 0xff0000;
+    if (moduleToBuild === 'homing') projectileColor = 0xff00ff; 
+    if (moduleToBuild === 'drone') projectileColor = 0x00ffff; 
 
-    const projectile = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), new THREE.MeshBasicMaterial({ color: color }));
+    const projectile = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: projectileColor }));
     projectile.position.copy(startBase.position);
     scene.add(projectile);
 
     const startTime = performance.now();
     const duration = 1000;
-    const maxHeight = 0.5;
+    const travelDistance = startBase.position.distanceTo(targetPos);
+    const maxHeight = Math.min(travelDistance * 0.2, 0.4);
 
     function animateFlight() {
         const elapsed = performance.now() - startTime;
         let t = elapsed / duration;
         
         if (t <= 1) {
+            for (let b of bases) {
+                if (b.type === 'aao' && b.isActive && b.owner !== startBase.owner) {
+                    if (b.position.distanceTo(projectile.position) < AAO_RADIUS) {
+                        b.isActive = false;
+                        b.mesh.material.color.setHex(0x555555); 
+                        explode(scene, bases, projectile.position, 0, 0.1, null, onGameOver); 
+                        scene.remove(projectile);
+                        if (onComplete) onComplete();
+                        return; 
+                    }
+                }
+            }
+
             const surfacePoint = new THREE.Vector3().copy(startBase.position).lerp(targetPos, t).normalize().multiplyScalar(PLANET_RADIUS);
             const heightOffset = Math.sin(t * Math.PI) * maxHeight;
             const norm = surfacePoint.clone().normalize();
@@ -49,20 +63,54 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
             requestAnimationFrame(animateFlight);
         } else {
             scene.remove(projectile);
-            try {
-                if (moduleToBuild === 'bomb') explode(scene, bases, targetPos, 25, onGameOver);
-                else if (moduleToBuild === 'homing') explode(scene, bases, targetPos, 50, onGameOver);
-                else createNewBase(scene, bases, targetPos, startBase, moduleToBuild, angle);
-            } finally {
-                if (onComplete) onComplete();
-            }
+            handleLanding(scene, bases, targetPos, startBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver); 
+            if (onComplete) onComplete();
         }
     }
     animateFlight();
 }
 
-export function explode(scene, bases, pos, damage, onGameOver) {
-    const explosion = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 1 }));
+function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver) {
+    let domeInRange = bases.find(b => b.type === 'dome' && b.owner !== parentBase.owner && b.position.distanceTo(targetPos) < 0.35);
+
+    if (domeInRange && !domeInRange.isDisabled) {
+        if (moduleToBuild === 'bomb') domeInRange.shieldHits += 1;
+        if (moduleToBuild === 'homing') domeInRange.shieldHits += 2;
+
+        if (domeInRange.shieldHits >= 2) {
+            domeInRange.isDisabled = true;
+            if (domeInRange.domeMesh) domeInRange.domeMesh.visible = false;
+        }
+        explode(scene, bases, targetPos, 0, 0.1, null, onGameOver);
+        return; 
+    }
+
+    if (moduleToBuild === 'bomb') { explode(scene, bases, targetPos, 25, 0.10, null, onGameOver); return; }
+    if (moduleToBuild === 'homing') { explode(scene, bases, targetPos, 50, 0.20, null, onGameOver); return; }
+    if (moduleToBuild === 'drone') { return; }
+
+    let collision = false;
+    for (let b of bases) {
+        if (b === parentBase) continue; 
+        if (b.position.distanceTo(targetPos) < 0.15) {
+            collision = true;
+            explode(scene, bases, targetPos, 25, 0.10, null, onGameOver);
+            b.hp -= 25; 
+            if (b.hp <= 0) destroyBaseAndChain(scene, bases, b, onGameOver);
+            break;
+        }
+    }
+
+    if (!collision) {
+        createNewBase(scene, bases, targetPos, parentBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt);
+    }
+}
+
+export function explode(scene, bases, pos, damage, radius, owner, onGameOver) {
+    const explosionGeo = new THREE.SphereGeometry(0.1, 16, 16);
+    const explosionMat = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 1 });
+    const explosion = new THREE.Mesh(explosionGeo, explosionMat);
+    
     const explosionCenter = pos.clone().normalize().multiplyScalar(PLANET_RADIUS);
     explosion.position.copy(explosionCenter);
     scene.add(explosion);
@@ -71,19 +119,23 @@ export function explode(scene, bases, pos, damage, onGameOver) {
     const interval = setInterval(() => {
         scale += 0.1;
         explosion.scale.set(scale, scale, scale);
-        explosion.material.opacity -= 0.05;
-        if (explosion.material.opacity <= 0) {
+        explosionMat.opacity -= 0.05;
+        if (explosionMat.opacity <= 0) {
             clearInterval(interval);
             scene.remove(explosion);
         }
     }, 30);
 
+    if (damage === 0) return; 
+
     const basesCopy = [...bases];
     for (let b of basesCopy) {
-        if (b.position.distanceTo(explosionCenter) < 0.5) {
+        if (b.position.distanceTo(explosionCenter) < radius) { 
             b.hp -= damage;
-            updateHealthBar(b);
-            if (b.hp <= 0) destroyBaseAndChain(scene, bases, b, onGameOver);
+            if (b.owner === 1) alert(`Попадание! Урон: ${damage}. HP базы: ${b.hp}`);
+            if (b.hp <= 0) {
+                destroyBaseAndChain(scene, bases, b, onGameOver);
+            }
         }
     }
 }
