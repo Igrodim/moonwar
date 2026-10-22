@@ -2,7 +2,6 @@
 <html>
 <head>
     <title>MoonWar 3D</title>
-    <!-- Подключаем космический шрифт -->
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
         body { margin: 0; padding: 0; background-color: #050510; overflow: hidden; font-family: 'Orbitron', Arial, sans-serif; color: white; user-select: none; }
@@ -79,7 +78,6 @@
             z-index: 1000; overflow: hidden;
         }
 
-        /* Анимация звездного фона */
         #start-screen::before {
             content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background-image: 
@@ -98,7 +96,7 @@
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(0, 170, 255, 0.3);
-            padding: 50px 80px;
+            padding: 40px 60px;
             border-radius: 20px;
             box-shadow: 0 0 30px rgba(0, 170, 255, 0.1), inset 0 0 20px rgba(0, 170, 255, 0.05);
             text-align: center;
@@ -107,37 +105,62 @@
         }
 
         .menu-card h1 {
-            font-size: 64px; margin: 0 0 10px 0; font-weight: 900; letter-spacing: 5px;
+            font-size: 56px; margin: 0 0 10px 0; font-weight: 900; letter-spacing: 5px;
             background: linear-gradient(180deg, #fff, #00aaff);
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
             text-shadow: 0 0 20px rgba(0, 170, 255, 0.5);
         }
 
         .menu-card p {
-            color: #88aaff; font-size: 18px; letter-spacing: 2px; margin-bottom: 40px;
+            color: #88aaff; font-size: 16px; letter-spacing: 2px; margin-bottom: 30px;
         }
 
-        /* --- БЛОК ДЛЯ ВЫБОРА ИГРОКОВ --- */
-        .ai-section {
+        .settings-group {
             display: flex;
             flex-direction: column;
             align-items: center;
+            gap: 25px;
             margin-bottom: 40px;
+        }
+
+        .settings-row {
+            display: flex; align-items: center; justify-content: space-between;
+            width: 100%; gap: 30px;
         }
 
         .ai-label {
             color: #88aaff;
-            font-size: 14px;
-            letter-spacing: 3px;
-            margin-bottom: 15px;
+            font-size: 16px;
+            letter-spacing: 2px;
             text-transform: uppercase;
             text-shadow: 0 0 5px rgba(0, 170, 255, 0.5);
+            white-space: nowrap;
         }
 
-        .ai-selector {
-            display: flex; align-items: center; justify-content: center; gap: 15px;
+        /* Стилизация выпадающего списка (select) */
+        .styled-select {
+            background: #1a1a2e;
+            color: #00aaff;
+            border: 2px solid #00aaff;
+            padding: 10px 40px 10px 15px;
+            border-radius: 8px;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 16px;
+            outline: none;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            background-image: url('data:image/svg+xml;utf8,<svg fill="%2300aaff" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>');
+            background-repeat: no-repeat;
+            background-position-x: 100%;
+            background-position-y: 50%;
+            transition: all 0.2s;
         }
+        .styled-select:hover { background-color: #2a2a4a; box-shadow: 0 0 15px rgba(0, 170, 255, 0.4); }
+        .styled-select option { background: #1a1a2e; color: white; }
 
+        .ai-selector { display: flex; align-items: center; gap: 15px; }
         .ai-btn {
             background: transparent; color: #00aaff; border: 2px solid #00aaff; 
             width: 40px; height: 40px; border-radius: 50%; font-size: 24px; font-weight: bold; cursor: pointer;
@@ -147,23 +170,20 @@
 
         #ai-count {
             font-size: 32px; font-weight: bold; color: white; text-align: center;
-            background: transparent; border: none; width: 80px; font-family: 'Orbitron', sans-serif;
+            background: transparent; border: none; width: 60px; font-family: 'Orbitron', sans-serif;
             border-bottom: 2px solid #4a4a6a; padding-bottom: 5px;
         }
         #ai-count:focus { outline: none; border-bottom-color: #00aaff; }
-        /* Убираем стрелочки у input type="number" */
         #ai-count::-webkit-outer-spin-button, #ai-count::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         #ai-count[type=number] { -moz-appearance: textfield; }
 
         #start-btn {
             background: transparent; color: #fff; font-size: 22px; font-weight: bold; letter-spacing: 3px;
-            padding: 20px 50px; border: 2px solid #00aaff; border-radius: 50px; cursor: pointer;
+            padding: 18px 50px; border: 2px solid #00aaff; border-radius: 50px; cursor: pointer;
             position: relative; overflow: hidden; transition: all 0.3s; font-family: 'Orbitron', sans-serif;
             box-shadow: 0 0 20px rgba(0, 170, 255, 0.2);
         }
-        #start-btn:hover {
-            background: #00aaff; color: #000; box-shadow: 0 0 40px #00aaff; transform: scale(1.05);
-        }
+        #start-btn:hover { background: #00aaff; color: #000; box-shadow: 0 0 40px #00aaff; transform: scale(1.05); }
         #start-btn::before {
             content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
             background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
@@ -181,12 +201,23 @@
             <h1>MOONWAR 3D</h1>
             <p>КОСМИЧЕСКАЯ ТАКТИЧЕСКАЯ СТРАТЕГИЯ</p>
             
-            <div class="ai-section">
-                <div class="ai-label">Количество игроков</div>
-                <div class="ai-selector">
-                    <button class="ai-btn" onclick="changeAI(-1)">-</button>
-                    <input type="number" id="ai-count" value="1" min="1" max="31" readonly>
-                    <button class="ai-btn" onclick="changeAI(1)">+</button>
+            <div class="settings-group">
+                <div class="settings-row">
+                    <div class="ai-label">Планета:</div>
+                    <select id="planet-size" class="styled-select" onchange="updateMaxPlayers()">
+                        <option value="1">Маленькая</option>
+                        <option value="2">Средняя</option>
+                        <option value="4">Большая</option>
+                    </select>
+                </div>
+
+                <div class="settings-row">
+                    <div class="ai-label">Игроков (ИИ):</div>
+                    <div class="ai-selector">
+                        <button class="ai-btn" onclick="changeAI(-1)">-</button>
+                        <input type="number" id="ai-count" value="1" min="1" max="11" readonly>
+                        <button class="ai-btn" onclick="changeAI(1)">+</button>
+                    </div>
                 </div>
             </div>
             
@@ -247,13 +278,25 @@
         <button id="end-turn-btn">КОНЕЦ ХОДА</button>
     </div>
 
-    <!-- Логика для кнопок + и - стартового экрана -->
     <script>
+        let maxPlayersLimit = 11;
+
+        function updateMaxPlayers() {
+            const size = parseInt(document.getElementById('planet-size').value);
+            if (size === 1) maxPlayersLimit = 11;
+            if (size === 2) maxPlayersLimit = 23;
+            if (size === 4) maxPlayersLimit = 47;
+            
+            const input = document.getElementById('ai-count');
+            if (parseInt(input.value) > maxPlayersLimit) input.value = maxPlayersLimit;
+            input.max = maxPlayersLimit;
+        }
+
         function changeAI(amount) {
             const input = document.getElementById('ai-count');
             let val = parseInt(input.value) + amount;
             if (val < 1) val = 1;
-            if (val > 31) val = 31;
+            if (val > maxPlayersLimit) val = maxPlayersLimit;
             input.value = val;
         }
     </script>
