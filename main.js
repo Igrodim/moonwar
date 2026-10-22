@@ -1,4 +1,4 @@
-import { initGame, updateCameraTilt, updateCameraAnimation, isGameRunning } from './game.js';
+import { initGame, updateCameraTilt, updateCameraAnimation } from './game.js';
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
@@ -46,12 +46,12 @@ window.addEventListener('resize', () => {
 let lastFrameTime = 0;
 const fpsLimit = 60;
 const interval = 1000 / fpsLimit;
+let isLoopRunning = false; // Флаг запущенного цикла
 
 function animate(time) {
-    requestAnimationFrame(animate);
+    if (!isLoopRunning) return; // Останавливаем цикл, если игра не запущена
 
-    // Если мы в меню (игра не началась), полностью останавливаем рендер
-    if (!isGameRunning) return;
+    requestAnimationFrame(animate);
 
     const delta = time - lastFrameTime;
     if (delta < interval) return;
@@ -65,4 +65,11 @@ function animate(time) {
     
     renderer.render(scene, camera);
 }
-requestAnimationFrame(animate);
+
+// Запускаем цикл ТОЛЬКО по событию из game.js
+window.addEventListener('startGameRender', () => {
+    if (!isLoopRunning) {
+        isLoopRunning = true;
+        requestAnimationFrame(animate);
+    }
+});
