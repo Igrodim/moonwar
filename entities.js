@@ -2,6 +2,8 @@ export const PLANET_RADIUS = 10;
 export const BASE_HEIGHT = 0.1;
 export const DOME_RADIUS = 0.35;
 export const AAO_RADIUS = 0.35; 
+export const VISION_RADIUS = 0.75;        // Обзор обычной базы
+export const RECON_VISION_RADIUS = 1.5;   // Обзор Радара (drone)
 
 export const playerColors = [];
 for (let i = 0; i < 32; i++) {
@@ -12,6 +14,8 @@ for (let i = 0; i < 32; i++) {
 export function getGeometry(type) {
     if (type === 'aao') return new THREE.CylinderGeometry(0.06, 0.06, BASE_HEIGHT, 3);
     if (type === 'generator') return new THREE.BoxGeometry(0.08, BASE_HEIGHT, 0.08);
+    // Радар (drone) - это конус
+    if (type === 'drone') return new THREE.ConeGeometry(0.06, BASE_HEIGHT * 3, 16); 
     return new THREE.CylinderGeometry(0.05, 0.05, BASE_HEIGHT, 16);
 }
 
@@ -26,11 +30,13 @@ export function createEnergyLine(scene, startPos, endPos, owner) {
     const midPoint = startPos.clone().lerp(endPos, 0.5);
     const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + 0.3);
     const curve = new THREE.QuadraticBezierCurve3(startPos, controlPoint, endPos);
+    
     const tubeGeometry = new THREE.TubeGeometry(curve, 20, 0.008, 8, false);
     const tubeMaterial = new THREE.MeshBasicMaterial({ color: playerColors[owner - 1] });
     const tube = new THREE.Mesh(tubeGeometry, tubeMaterial);
     scene.add(tube);
-    return tube;
+    
+    return { tube, curve };
 }
 
 export function createNewBase(scene, bases, pos, parentBase, moduleType, sector, playerGenerators, onGeneratorBuilt) {
@@ -40,16 +46,26 @@ export function createNewBase(scene, bases, pos, parentBase, moduleType, sector,
     if (moduleType === 'generator') newBaseColor = 0x00ff00; 
     if (moduleType === 'dome') newBaseColor = 0xffff00; 
     if (moduleType === 'aao') newBaseColor = 0xff00ff; 
+    if (moduleType === 'drone') newBaseColor = 0x00ffff; // Радар голубой
 
     const newBase = new THREE.Mesh(getGeometry(moduleType), new THREE.MeshBasicMaterial({ color: newBaseColor }));
     layFlatOnSphere(newBase, pos);
     scene.add(newBase);
     
-    const lineMesh = createEnergyLine(scene, parentBase.position, pos, parentBase.owner);
+    const lineData = createEnergyLine(scene, parentBase.position, pos, parentBase.owner);
 
     const baseObj = { 
-        mesh: newBase, position: pos.clone(), owner: parentBase.owner, 
-        hp: 100, maxHp: 100, type: moduleType, parent: parentBase, sector: sector, lineMesh: lineMesh
+        mesh: newBase, 
+        position: pos.clone(), 
+        owner: parentBase.owner, 
+        hp: 100, 
+        maxHp: 100, 
+        type: moduleType, 
+        parent: parentBase, 
+        sector: sector, 
+        lineMesh: lineData.tube,
+        curve: lineData.curve,
+        visionRadius: moduleType === 'drone' ? RECON_VISION_RADIUS : VISION_RADIUS
     };
     
     if (moduleType === 'dome') { baseObj.shieldHits = 0; baseObj.isDisabled = false; }
@@ -77,18 +93,12 @@ export function createNewBase(scene, bases, pos, parentBase, moduleType, sector,
 
 export function destroyBaseAndChain(scene, bases, base, onGameOver) {
     console.log(`Уничтожена база типа ${base.type} Игрока ${base.owner}`);
-
     const children = bases.filter(b => b.parent === base);
     children.forEach(child => destroyBaseAndChain(scene, bases, child, onGameOver));
-
     scene.remove(base.mesh);
     if (base.lineMesh) scene.remove(base.lineMesh);
     if (base.domeMesh) scene.remove(base.domeMesh); 
-    
     const index = bases.indexOf(base);
     if (index > -1) bases.splice(index, 1);
-
-    if (base.type === 'hub') {
-        if (onGameOver) onGameOver(base.owner);
-    }
+    if (base.type === 'hub') { if (onGameOver) onGameOver(base.owner); }
 }
