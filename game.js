@@ -22,9 +22,7 @@ let selectedModuleType = null;
 let gameOver = false;
 let isAITurn = false;
 
-// Переменная для хранения текущего поворота камеры
 let currentCameraAzimuth = 0; 
-
 let fogMat;
 
 export function initGame(_scene, _camera, _controls) {
@@ -41,7 +39,8 @@ export function initGame(_scene, _camera, _controls) {
 }
 
 export function updateCameraTilt() {
-    if (!selectedBase || isAITurn) return;
+    // Убрали isAITurn, чтобы камера продолжала работать во время хода ИИ
+    if (!selectedBase) return;
     
     const target = selectedBase.position;
     const normal = target.clone().normalize();
@@ -77,7 +76,6 @@ function centerCameraOnBase(base) {
 
     camera.up.copy(normal); 
     
-    // Используем сохраненный угол поворота камеры
     let baseTangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
     if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
     let tangent = baseTangent.applyAxisAngle(normal, currentCameraAzimuth);
@@ -183,21 +181,22 @@ export function updateFogOfWar() {
 
 function setupEventListeners() {
     window.addEventListener('keydown', (e) => {
-        if (isAITurn || gameOver || !selectedBase) return;
+        // Убрали isAITurn, чтобы можно было крутить камеру во время хода ИИ
+        if (gameOver || !selectedBase) return; 
         const key = e.key.toLowerCase();
         if (key === 'a' || key === 'ф') {
-            rotateCameraAroundTarget(-Math.PI / 16); // Шаг 11.25 градусов
+            rotateCameraAroundTarget(-Math.PI / 16); 
         } else if (key === 'd' || key === 'в') {
             rotateCameraAroundTarget(Math.PI / 16);
         }
     });
 
     uiElements.rotateLeft.addEventListener('click', () => {
-        if (isAITurn || gameOver || !selectedBase) return;
+        if (gameOver || !selectedBase) return;
         rotateCameraAroundTarget(-Math.PI / 16);
     });
     uiElements.rotateRight.addEventListener('click', () => {
-        if (isAITurn || gameOver || !selectedBase) return;
+        if (gameOver || !selectedBase) return;
         rotateCameraAroundTarget(Math.PI / 16);
     });
 
@@ -213,9 +212,15 @@ function setupEventListeners() {
             btn.classList.add('selected');
             selectedModuleType = btn.getAttribute('data-type');
             
+            // ФИКС: Возвращаем панель прицеливания, если выбран не ремонт
             if (selectedModuleType === 'heal') {
                 uiElements.uiPanel.style.display = 'none';
                 arrowHelper.visible = false;
+            } else if (selectedBase) {
+                uiElements.uiPanel.style.display = 'block';
+                arrowHelper.visible = true;
+                arrowHelper.position.copy(selectedBase.position);
+                updateArrowDirection();
             }
         });
     });
@@ -225,7 +230,6 @@ function setupEventListeners() {
         endTurn();
     });
 
-    // Шаг стрелки теперь 11.25
     uiElements.btnLeft.addEventListener('click', () => { if (selectedBase && !isAITurn) { currentAngle += 11.25; updateArrowDirection(); } });
     uiElements.btnRight.addEventListener('click', () => { if (selectedBase && !isAITurn) { currentAngle -= 11.25; updateArrowDirection(); } });
 
@@ -267,7 +271,6 @@ function setupEventListeners() {
                 playerEnergy[currentPlayer] -= cost;
                 updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
                 
-                // Сохраняем угол прицела перед выстрелом
                 selectedBase.aimAngle = currentAngle;
 
                 executeShot(scene, bases, selectedBase, check.snappedAngle, power, selectedModuleType, check.sector, playerGenerators, 
@@ -300,7 +303,7 @@ function setupEventListeners() {
 function rotateCameraAroundTarget(angle) {
     if (!selectedBase) return;
     
-    currentCameraAzimuth += angle; // СОХРАНЯЕМ УГОЛ КАМЕРЫ
+    currentCameraAzimuth += angle; 
     
     const target = selectedBase.position;
     const normal = target.clone().normalize();
@@ -368,8 +371,16 @@ function endTurn() {
 
     if (currentPlayer > 1) {
         isAITurn = true;
+        // Убрали отключение зума
         uiElements.bottomPanel.style.pointerEvents = 'none';
         uiElements.bottomPanel.style.opacity = '0.5';
+
+        // Камера плавно центрируется на базе Игрока 1 перед ходом ИИ
+        const myHub = bases.find(b => b.owner === 1 && b.type === 'hub');
+        if (myHub) {
+            selectedBase = myHub; // Фиксируем базу для updateCameraTilt
+            centerCameraOnBase(myHub);
+        }
         
         playAITurn({
             scene, camera, controls, bases, currentPlayer, playerEnergy, playerGenerators, PLANET_RADIUS,
@@ -381,8 +392,21 @@ function endTurn() {
         });
     } else {
         isAITurn = false;
+        // Зум уже не отключали, ничего не включаем обратно
         uiElements.bottomPanel.style.pointerEvents = 'auto';
         uiElements.bottomPanel.style.opacity = '1';
+
+        // Возвращаем камеру и выделяем базу игрока 1 после хода ИИ
+        const myHub = bases.find(b => b.owner === 1 && b.type === 'hub');
+        if (myHub) {
+            selectedBase = myHub;
+            centerCameraOnBase(selectedBase);
+            uiElements.uiPanel.style.display = 'block';
+            arrowHelper.position.copy(selectedBase.position);
+            currentAngle = selectedBase.aimAngle;
+            updateArrowDirection();
+            arrowHelper.visible = true;
+        }
     }
 }
 
@@ -423,7 +447,7 @@ function startGame() {
             centerCameraOnBase(selectedBase); 
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(pos);
-            currentAngle = selectedBase.aimAngle; // Загружаем сохраненный угол
+            currentAngle = selectedBase.aimAngle; 
             updateArrowDirection();
             arrowHelper.visible = true;
         }
@@ -472,7 +496,7 @@ function setupRaycaster() {
             
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(selectedBase.position);
-            currentAngle = selectedBase.aimAngle; // ВОССТАНАВЛИВАЕМ УГОЛ ПРИЦЕЛА
+            currentAngle = selectedBase.aimAngle; 
             updateArrowDirection();
             arrowHelper.visible = true;
         } else {
