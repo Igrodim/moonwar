@@ -34,17 +34,38 @@ export function initGame(_scene, _camera, _controls) {
     setupEventListeners();
 }
 
-// БЕЗОПАСНЫЙ НАКЛОН КАМЕРЫ (Без Gimbal Lock)
+// СТРОГО 90 ГРАДУСОВ -> 70 ГРАДУСОВ ПРИ ПРИБЛИЖЕНИИ
 export function updateCameraTilt() {
     if (!selectedBase) return;
     
     const target = selectedBase.position;
     const normal = target.clone().normalize();
+    const dist = camera.position.distanceTo(target);
     
-    // Вычисляем безопасный "верх" камеры, чтобы она не смотрела ровно вниз
+    const minDist = 1.5;  
+    const maxDist = 20;   
+    
+    let t = (dist - minDist) / (maxDist - minDist);
+    t = Math.max(0, Math.min(1, t));
+    
+    // 0 градусов (90 к поверхности) вдали, 20 градусов (70 к поверхности) вблизи
+    const targetPhi = THREE.MathUtils.degToRad(20 * (1 - t)); 
+    
+    const offset = camera.position.clone().sub(target);
+    const currentPhi = offset.angleTo(normal);
+    
+    if (Math.abs(currentPhi - targetPhi) > 0.005) {
+        const axis = new THREE.Vector3().crossVectors(offset, normal).normalize();
+        if (axis.lengthSq() > 0.001) {
+            offset.applyAxisAngle(axis, (currentPhi - targetPhi) * 0.1);
+            camera.position.copy(target).add(offset);
+        }
+    }
+    
+    // БЕЗОПАСНЫЙ UP (защита от Gimbal Lock при 90 градусах)
     const lookDir = target.clone().sub(camera.position).normalize();
     let right = new THREE.Vector3().crossVectors(lookDir, normal).normalize();
-    if (right.lengthSq() < 0.001) right = new THREE.Vector3(1, 0, 0).cross(lookDir).normalize();
+    if (right.lengthSq() < 0.001) right = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
     camera.up.copy(new THREE.Vector3().crossVectors(right, lookDir).normalize());
 }
 
@@ -53,11 +74,8 @@ function centerCameraOnBase(base) {
     const dist = 15;
     const tangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
     
-    // Ставим камеру снаружи, чтобы база была по центру
-    camera.position.copy(base.position)
-        .add(normal.clone().multiplyScalar(dist * 0.8))
-        .add(tangent.clone().multiplyScalar(dist * 0.6));
-        
+    // Ставим камеру снаружи
+    camera.position.copy(base.position).add(normal.clone().multiplyScalar(dist));
     controls.target.copy(base.position);
     controls.update();
 }
@@ -124,7 +142,6 @@ export function updateFogOfWar() {
 }
 
 function setupEventListeners() {
-    // Кнопки камеры A/D
     uiElements.rotateLeft.addEventListener('click', () => {
         if (!selectedBase || isCharging) return;
         const target = selectedBase.position;
@@ -145,7 +162,6 @@ function setupEventListeners() {
         controls.update();
     });
 
-    // Энергия
     uiElements.spinBtn.addEventListener('click', () => {
         if (hasSpunThisTurn || gameOver) return;
         const minRoll = 5 + playerGenerators[currentPlayer];
@@ -160,7 +176,6 @@ function setupEventListeners() {
         updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
     });
 
-    // Выбор модуля
     uiElements.moduleBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             uiElements.moduleBtns.forEach(b => b.classList.remove('selected'));
@@ -173,11 +188,9 @@ function setupEventListeners() {
         });
     });
 
-    // Поворот стрелки
     uiElements.btnLeft.addEventListener('click', () => { if (selectedBase) { currentAngle += 11.25; updateArrowDirection(); } });
     uiElements.btnRight.addEventListener('click', () => { if (selectedBase) { currentAngle -= 11.25; updateArrowDirection(); } });
 
-    // Выстрел
     uiElements.fireBtn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         if (!selectedBase || !selectedModuleType) return;
@@ -222,7 +235,6 @@ function setupEventListeners() {
         }
     });
 
-    // Конец хода
     uiElements.endTurnBtn.addEventListener('click', () => {
         if (gameOver) return;
         currentPlayer++;
@@ -239,14 +251,13 @@ function setupEventListeners() {
         if (currentPlayer > 1) {
             uiElements.bottomPanel.style.pointerEvents = 'none';
             uiElements.bottomPanel.style.opacity = '0.5';
-            playAITurn({ scene, camera, controls, bases, currentPlayer, playerEnergy, playerGenerators, onTurnEnd: endTurn, onGameOver: endGame, onGeneratorBuilt: () => {}, updateUI: () => updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors) });
+            playAITurn({ scene, camera, controls, bases, currentPlayer, playerEnergy, playerGenerators, onTurnEnd: endTurn, onGameOver: endGame, onGeneratorBuilt: () => {}, updateUI: () => updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors), updateFog: updateFogOfWar });
         } else {
             uiElements.bottomPanel.style.pointerEvents = 'auto';
             uiElements.bottomPanel.style.opacity = '1';
         }
     });
 
-    // Старт
     uiElements.startBtn.addEventListener('click', () => {
         totalPlayers = 1 + (parseInt(uiElements.aiCountInput.value) || 1);
         for (let i = 1; i <= totalPlayers; i++) { playerEnergy[i] = 0; playerGenerators[i] = 0; }
@@ -305,7 +316,7 @@ function endTurn() {
     if (currentPlayer > 1) {
         uiElements.bottomPanel.style.pointerEvents = 'none';
         uiElements.bottomPanel.style.opacity = '0.5';
-        playAITurn({ scene, camera, controls, bases, currentPlayer, playerEnergy, playerGenerators, onTurnEnd: endTurn, onGameOver: endGame, onGeneratorBuilt: () => {}, updateUI: () => updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors) });
+        playAITurn({ scene, camera, controls, bases, currentPlayer, playerEnergy, playerGenerators, onTurnEnd: endTurn, onGameOver: endGame, onGeneratorBuilt: () => {}, updateUI: () => updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors), updateFog: updateFogOfWar });
     } else {
         uiElements.bottomPanel.style.pointerEvents = 'auto';
         uiElements.bottomPanel.style.opacity = '1';
