@@ -1,5 +1,5 @@
 import { createPlanet } from './planet.js';
-import { initGame } from './game.js';
+import { initGame, updateCameraTilt } from './game.js';
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
@@ -21,7 +21,7 @@ const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
 controls.enablePan = false;    
-controls.enableRotate = false; // Вращение только на A/D
+controls.enableRotate = false; 
 controls.zoomSpeed = 1.2;
 controls.minDistance = 1.5; 
 controls.maxDistance = 25; 
@@ -37,7 +37,10 @@ window.addEventListener('resize', () => {
 
 function animate() {
     requestAnimationFrame(animate);
+    
+    updateCameraTilt(); // Вызываем каждый кадр для плавного наклона
     controls.update();
+    
     renderer.render(scene, camera);
 }
 animate();
