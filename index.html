@@ -2,75 +2,157 @@
 <html>
 <head>
     <title>MoonWar 3D</title>
+    <!-- Подключаем космический шрифт -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
-        body { margin: 0; padding: 0; background-color: #1a1a2e; overflow: hidden; font-family: Arial, sans-serif; color: white; user-select: none; }
+        body { margin: 0; padding: 0; background-color: #050510; overflow: hidden; font-family: 'Orbitron', Arial, sans-serif; color: white; user-select: none; }
         canvas { display: block; }
         
-        #top-info { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 8px; border: 1px solid #4a4a6a; }
-        #turn-text { font-size: 20px; font-weight: bold; color: #00aaff; }
-        #energy-text { font-size: 18px; margin-top: 5px; color: #ffaa00; }
+        /* --- ОБЩИЕ ЭЛЕМЕНТЫ --- */
+        #top-info { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 8px; border: 1px solid #4a4a6a; z-index: 10; }
+        #turn-text { font-size: 20px; font-weight: bold; color: #00aaff; text-shadow: 0 0 10px #00aaff; }
+        #energy-text { font-size: 18px; margin-top: 5px; color: #ffaa00; text-shadow: 0 0 10px #ffaa00; }
 
         #bottom-panel {
             position: absolute; bottom: 0; left: 0; width: 100%; height: 120px;
             background: rgba(10, 10, 25, 0.95); border-top: 2px solid #4a4a6a;
             display: flex; align-items: center; justify-content: space-between; padding: 0 20px; box-sizing: border-box;
+            z-index: 10; box-shadow: 0 -5px 20px rgba(0,0,0,0.5);
         }
 
-        #energy-wheel-container { 
-            display: flex; align-items: center; gap: 15px; 
-        }
+        #energy-wheel-container { display: flex; align-items: center; gap: 15px; }
         
         #spin-btn {
-            background: #ffaa00; color: black; font-weight: bold; font-size: 32px;
-            padding: 15px; border-radius: 50%; width: 80px; height: 80px; border: 3px solid #fff; cursor: pointer; transition: transform 0.1s;
-            display: flex; justify-content: center; align-items: center;
+            background: #ffaa00; color: black; font-weight: 900; font-size: 32px;
+            padding: 15px; border-radius: 50%; width: 80px; height: 80px; border: 3px solid #fff; cursor: pointer; transition: all 0.2s;
+            display: flex; justify-content: center; align-items: center; font-family: 'Orbitron', sans-serif;
+            box-shadow: 0 0 15px rgba(255, 170, 0, 0.5);
         }
+        #spin-btn:hover:not(:disabled) { transform: scale(1.05); box-shadow: 0 0 25px rgba(255, 170, 0, 0.8); }
         #spin-btn:active { transform: scale(0.95); }
-        #spin-btn:disabled { background: #555; cursor: not-allowed; border-color: #333; color: #888; }
+        #spin-btn:disabled { background: #555; cursor: not-allowed; border-color: #333; color: #888; box-shadow: none; }
 
         .camera-controls { display: flex; gap: 10px; margin-left: 10px; }
         .camera-controls button {
-            background: #333; color: white; border: 1px solid #666; padding: 15px 20px;
-            border-radius: 8px; cursor: pointer; font-size: 20px; font-weight: bold;
+            background: #1a1a2e; color: #00aaff; border: 1px solid #00aaff; padding: 15px 20px;
+            border-radius: 8px; cursor: pointer; font-size: 20px; font-weight: bold; font-family: 'Orbitron', sans-serif;
+            transition: all 0.2s;
         }
-        .camera-controls button:hover { background: #555; }
-        .camera-controls button:active { background: #2a4a2a; }
+        .camera-controls button:hover { background: #00aaff; color: black; box-shadow: 0 0 15px #00aaff; }
 
         #modules-container { display: flex; gap: 20px; flex-grow: 1; justify-content: center; }
-        .tab-group { display: flex; flex-direction: column; background: #222; border: 1px solid #4a4a6a; border-radius: 8px; }
-        .tab-header { background: #4a4a6a; text-align: center; padding: 5px; font-size: 14px; font-weight: bold; }
+        .tab-group { display: flex; flex-direction: column; background: #111; border: 1px solid #4a4a6a; border-radius: 8px; overflow: hidden; }
+        .tab-header { background: #2a2a4a; text-align: center; padding: 5px; font-size: 12px; font-weight: bold; color: #aaa; }
         .tab-items { display: flex; padding: 10px; gap: 10px; }
         .module-btn {
-            background: #333; color: white; border: 1px solid #666; padding: 10px;
-            border-radius: 5px; cursor: pointer; width: 90px; text-align: center; font-size: 12px;
+            background: #1a1a2e; color: white; border: 1px solid #4a4a6a; padding: 10px;
+            border-radius: 5px; cursor: pointer; width: 90px; text-align: center; font-size: 12px; font-family: 'Orbitron', sans-serif;
+            transition: all 0.2s;
         }
-        .module-btn:hover { background: #555; }
-        .module-btn.selected { border-color: #00ff00; background: #2a4a2a; }
+        .module-btn:hover { background: #2a2a4a; border-color: #00aaff; }
+        .module-btn.selected { border-color: #00ff00; background: #1a3a1a; color: #00ff00; box-shadow: 0 0 10px rgba(0,255,0,0.3); }
 
-        #end-turn-btn { background: #aa0000; color: white; font-weight: bold; font-size: 16px; padding: 15px 30px; border: none; border-radius: 8px; cursor: pointer; margin-right: 20px; }
+        #end-turn-btn { 
+            background: #aa0000; color: white; font-weight: bold; font-size: 16px; padding: 15px 30px; 
+            border: none; border-radius: 8px; cursor: pointer; margin-right: 20px; font-family: 'Orbitron', sans-serif;
+            transition: all 0.2s; box-shadow: 0 0 15px rgba(170, 0, 0, 0.5);
+        }
+        #end-turn-btn:hover { background: #ff0000; box-shadow: 0 0 25px rgba(255, 0, 0, 0.8); }
 
         #ui-panel {
             position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.85); padding: 10px 20px; border-radius: 10px;
-            display: none; text-align: center; border: 2px solid #4a4a6a;
+            background: rgba(10, 10, 25, 0.9); padding: 15px 30px; border-radius: 10px;
+            display: none; text-align: center; border: 2px solid #00aaff; box-shadow: 0 0 20px rgba(0, 170, 255, 0.3);
+            z-index: 10; backdrop-filter: blur(5px);
         }
-        #ui-panel button { background: #4a4a6a; color: white; border: none; padding: 5px 15px; font-size: 16px; cursor: pointer; margin: 0 5px; border-radius: 5px; }
-        #power-bar-container { width: 200px; height: 15px; background: #333; border: 1px solid #fff; margin: 10px auto; }
-        #power-bar { width: 0%; height: 100%; background: #ffaa00; }
-        #fire-btn { background: #aa00aa !important; font-weight: bold; width: 100%; margin-top: 5px; }
+        #ui-panel button { background: #2a2a4a; color: white; border: 1px solid #00aaff; padding: 8px 15px; font-size: 16px; cursor: pointer; margin: 0 5px; border-radius: 5px; font-family: 'Orbitron', sans-serif; }
+        #power-bar-container { width: 200px; height: 15px; background: #111; border: 1px solid #00aaff; margin: 10px auto; border-radius: 10px; overflow: hidden; }
+        #power-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #ffaa00, #ff0000); box-shadow: 0 0 10px #ffaa00; }
+        #fire-btn { background: #aa00aa !important; font-weight: bold; width: 100%; margin-top: 10px; border-color: #ff00ff !important; box-shadow: 0 0 10px rgba(255,0,255,0.5); }
+        #fire-btn:hover { background: #ff00ff !important; color: black; }
 
+        /* --- СТИЛИ СТАРТОВОГО ЭКРАНА --- */
         #start-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: #1a1a2e; display: flex; flex-direction: column; align-items: center; justify-content: center;
-            z-index: 1000;
+            background: radial-gradient(circle at center, #1a1a2e 0%, #050510 100%);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 1000; overflow: hidden;
         }
-        #start-screen input { font-size: 20px; padding: 10px; width: 60px; text-align: center; margin: 10px; }
-        #start-screen label { font-size: 24px; margin-bottom: 10px; }
+
+        /* Анимация звездного фона */
+        #start-screen::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-image: 
+                radial-gradient(1px 1px at 20px 30px, #ffffff, rgba(0,0,0,0)),
+                radial-gradient(1px 1px at 40px 70px, #ffffff, rgba(0,0,0,0)),
+                radial-gradient(1px 1px at 50px 160px, #ffffff, rgba(0,0,0,0)),
+                radial-gradient(2px 2px at 90px 40px, #ffffff, rgba(0,0,0,0)),
+                radial-gradient(2px 2px at 130px 80px, #ffffff, rgba(0,0,0,0));
+            background-repeat: repeat; background-size: 200px 200px;
+            opacity: 0.3; animation: stars 60s linear infinite;
+        }
+        @keyframes stars { from { background-position: 0 0; } to { background-position: 0 -200px; } }
+
+        .menu-card {
+            background: rgba(20, 20, 40, 0.6);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 170, 255, 0.3);
+            padding: 50px 80px;
+            border-radius: 20px;
+            box-shadow: 0 0 30px rgba(0, 170, 255, 0.1), inset 0 0 20px rgba(0, 170, 255, 0.05);
+            text-align: center;
+            z-index: 2;
+            position: relative;
+        }
+
+        .menu-card h1 {
+            font-size: 64px; margin: 0 0 10px 0; font-weight: 900; letter-spacing: 5px;
+            background: linear-gradient(180deg, #fff, #00aaff);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 20px rgba(0, 170, 255, 0.5);
+        }
+
+        .menu-card p {
+            color: #88aaff; font-size: 18px; letter-spacing: 2px; margin-bottom: 30px;
+        }
+
+        .ai-selector {
+            display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 40px;
+        }
+
+        .ai-btn {
+            background: transparent; color: #00aaff; border: 2px solid #00aaff; 
+            width: 40px; height: 40px; border-radius: 50%; font-size: 24px; font-weight: bold; cursor: pointer;
+            display: flex; justify-content: center; align-items: center; transition: all 0.2s; font-family: 'Orbitron', sans-serif;
+        }
+        .ai-btn:hover { background: rgba(0, 170, 255, 0.2); box-shadow: 0 0 15px #00aaff; }
+
+        #ai-count {
+            font-size: 32px; font-weight: bold; color: white; text-align: center;
+            background: transparent; border: none; width: 80px; font-family: 'Orbitron', sans-serif;
+            border-bottom: 2px solid #4a4a6a; padding-bottom: 5px;
+        }
+        #ai-count:focus { outline: none; border-bottom-color: #00aaff; }
+        /* Убираем стрелочки у input type="number" */
+        #ai-count::-webkit-outer-spin-button, #ai-count::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        #ai-count[type=number] { -moz-appearance: textfield; }
+
         #start-btn {
-            background: #00aaff; color: white; font-size: 24px; font-weight: bold;
-            padding: 15px 40px; border: none; border-radius: 10px; cursor: pointer; margin-top: 20px;
+            background: transparent; color: #fff; font-size: 22px; font-weight: bold; letter-spacing: 3px;
+            padding: 20px 50px; border: 2px solid #00aaff; border-radius: 50px; cursor: pointer;
+            position: relative; overflow: hidden; transition: all 0.3s; font-family: 'Orbitron', sans-serif;
+            box-shadow: 0 0 20px rgba(0, 170, 255, 0.2);
         }
-        #start-btn:hover { background: #0088cc; }
+        #start-btn:hover {
+            background: #00aaff; color: #000; box-shadow: 0 0 40px #00aaff; transform: scale(1.05);
+        }
+        #start-btn::before {
+            content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            transition: all 0.5s;
+        }
+        #start-btn:hover::before { left: 100%; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -78,10 +160,18 @@
 <body>
 
     <div id="start-screen">
-        <h1>MoonWar 3D</h1>
-        <label>Количество противников (ИИ) от 1 до 31:</label>
-        <input type="number" id="ai-count" value="1" min="1" max="31">
-        <button id="start-btn">НАЧАТЬ ИГРУ</button>
+        <div class="menu-card">
+            <h1>MOONWAR 3D</h1>
+            <p>КОСМИЧЕСКАЯ ТАКТИЧЕСКАЯ СТРАТЕГИЯ</p>
+            
+            <div class="ai-selector">
+                <button class="ai-btn" onclick="changeAI(-1)">-</button>
+                <input type="number" id="ai-count" value="1" min="1" max="31" readonly>
+                <button class="ai-btn" onclick="changeAI(1)">+</button>
+            </div>
+            
+            <button id="start-btn">НАЧАТЬ ИГРУ</button>
+        </div>
     </div>
 
     <div id="top-info">
@@ -92,7 +182,7 @@
     <div id="ui-panel">
         <div>
             <button id="turn-left">◀</button>
-            <span style="font-size: 14px; margin: 0 10px;">Направление</span>
+            <span style="font-size: 14px; margin: 0 10px; color: #aaa;">НАПРАВЛЕНИЕ</span>
             <button id="turn-right">▶</button>
         </div>
         <div id="power-bar-container"><div id="power-bar"></div></div>
@@ -103,7 +193,6 @@
         <div id="energy-wheel-container">
             <button id="spin-btn">⚡</button>
             <div class="camera-controls">
-                <!-- ЗАМЕНИЛИ СТРЕЛКИ НА A И D -->
                 <button id="rotate-left" title="Повернуть камеру влево (A)">A</button>
                 <button id="rotate-right" title="Повернуть камеру вправо (D)">D</button>
             </div>
@@ -111,7 +200,7 @@
 
         <div id="modules-container">
             <div class="tab-group">
-                <div class="tab-header">1 Энергия</div>
+                <div class="tab-header">1 ЭНЕРГИЯ</div>
                 <div class="tab-items">
                     <button class="module-btn" data-type="bomb">БОМБА</button>
                     <button class="module-btn" data-type="heal">РЕМОНТ</button>
@@ -119,14 +208,14 @@
                 </div>
             </div>
             <div class="tab-group">
-                <div class="tab-header">3 Энергии</div>
+                <div class="tab-header">3 ЭНЕРГИИ</div>
                 <div class="tab-items">
                     <button class="module-btn" data-type="aao">ПВО</button>
                     <button class="module-btn" data-type="homing">РАКЕТА</button>
                 </div>
             </div>
             <div class="tab-group">
-                <div class="tab-header">7 Энергии</div>
+                <div class="tab-header">7 ЭНЕРГИИ</div>
                 <div class="tab-items">
                     <button class="module-btn" data-type="relay">БАЗА</button>
                     <button class="module-btn" data-type="dome">КУПОЛ</button>
@@ -137,6 +226,17 @@
 
         <button id="end-turn-btn">КОНЕЦ ХОДА</button>
     </div>
+
+    <!-- Логика для кнопок + и - стартового экрана -->
+    <script>
+        function changeAI(amount) {
+            const input = document.getElementById('ai-count');
+            let val = parseInt(input.value) + amount;
+            if (val < 1) val = 1;
+            if (val > 31) val = 31;
+            input.value = val;
+        }
+    </script>
 
     <script type="module" src="main.js"></script>
 </body>
