@@ -35,7 +35,6 @@
         #spin-btn:hover:not(:disabled) { background: rgba(0, 170, 255, 0.2); }
         #spin-btn:disabled { background: #222; cursor: not-allowed; border-color: #444; color: #555; animation: none; box-shadow: none; }
 
-        /* ФИКС: Жесткая ширина 55px для всех кнопок */
         .camera-controls { display: flex; gap: 10px; margin-left: 10px; }
         .camera-controls button {
             background: #1a1a2e; color: #00aaff; border: 1px solid #00aaff; 
@@ -82,6 +81,7 @@
         #fire-btn { background: rgba(0, 170, 255, 0.2) !important; font-weight: bold; width: 100%; margin-top: 10px; border-color: #00aaff !important; color: #fff; }
         #fire-btn:hover { background: #00aaff !important; color: black; box-shadow: 0 0 20px #00aaff; }
 
+        /* --- СТИЛИ СТАРТОВОГО ЭКРАНА --- */
         #start-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: radial-gradient(circle at center, #1a1a2e 0%, #050510 100%);
@@ -89,8 +89,9 @@
             z-index: 1000; overflow: hidden;
         }
 
+        /* ФИКС АНИМАЦИИ: Используем transform и 3D-слой */
         #start-screen::before {
-            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            content: ''; position: absolute; top: -200px; left: 0; width: 100%; height: calc(100% + 200px);
             background-image: 
                 radial-gradient(1px 1px at 20px 30px, #ffffff, rgba(0,0,0,0)),
                 radial-gradient(1px 1px at 40px 70px, #ffffff, rgba(0,0,0,0)),
@@ -98,12 +99,17 @@
                 radial-gradient(2px 2px at 90px 40px, #ffffff, rgba(0,0,0,0)),
                 radial-gradient(2px 2px at 130px 80px, #ffffff, rgba(0,0,0,0));
             background-repeat: repeat; background-size: 200px 200px;
-            opacity: 0.3; animation: stars 60s linear infinite;
+            opacity: 0.3; 
+            animation: stars 60s linear infinite;
+            will-change: transform; /* Принудительно на GPU */
         }
-        @keyframes stars { from { background-position: 0 0; } to { background-position: 0 -200px; } }
+        @keyframes stars { 
+            from { transform: translate3d(0, 0, 0); } 
+            to { transform: translate3d(0, 200px, 0); } 
+        }
 
         .menu-card {
-            background: rgba(20, 20, 40, 0.95); /* Убрали backdrop-filter */
+            background: rgba(20, 20, 40, 0.95);
             border: 1px solid rgba(0, 170, 255, 0.3);
             padding: 40px 60px;
             border-radius: 20px;
