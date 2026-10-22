@@ -11,7 +11,7 @@ for (let i = 0; i < 32; i++) {
 export function getGeometry(type) {
     if (type === 'aao') return new THREE.CylinderGeometry(0.06, 0.06, BASE_HEIGHT, 3);
     if (type === 'generator') return new THREE.BoxGeometry(0.08, BASE_HEIGHT, 0.08);
-    if (type === 'drone') return new THREE.ConeGeometry(0.06, BASE_HEIGHT * 3, 16); 
+    if (type === 'drone') return new THREE.ConeGeometry(0.06, BASE_HEIGHT * 3, 16);
     return new THREE.CylinderGeometry(0.05, 0.05, BASE_HEIGHT, 16);
 }
 
@@ -31,7 +31,7 @@ export function createHealthBar(scene, base) {
     const tex = new THREE.CanvasTexture(canvas);
     const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
     const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(0.24, 0.06, 1); 
+    sprite.scale.set(0.24, 0.06, 1);
     
     const normal = base.position.clone().normalize();
     sprite.position.copy(base.position).add(normal.clone().multiplyScalar(0.2));
@@ -74,10 +74,10 @@ export function createEnergyLine(scene, startPos, endPos, owner) {
 
 export function createNewBase(scene, bases, pos, parentBase, moduleType, angle, playerGenerators, onGeneratorBuilt) {
     let newBaseColor = playerColors[parentBase.owner - 1];
-    if (moduleType === 'generator') newBaseColor = 0x00ff00; 
-    if (moduleType === 'dome') newBaseColor = 0xffff00; 
-    if (moduleType === 'aao') newBaseColor = 0xff00ff; 
-    if (moduleType === 'drone') newBaseColor = 0x00ffff; 
+    if (moduleType === 'generator') newBaseColor = 0x00ff00;
+    if (moduleType === 'dome') newBaseColor = 0xffff00;
+    if (moduleType === 'aao') newBaseColor = 0xff00ff;
+    if (moduleType === 'drone') newBaseColor = 0x00ffff;
 
     const newBase = new THREE.Mesh(getGeometry(moduleType), new THREE.MeshBasicMaterial({ color: newBaseColor }));
     layFlatOnSphere(newBase, pos);
@@ -86,8 +86,8 @@ export function createNewBase(scene, bases, pos, parentBase, moduleType, angle, 
     const lineData = createEnergyLine(scene, parentBase.position, pos, parentBase.owner);
 
     const baseObj = { 
-        mesh: newBase, position: pos.clone(), owner: parentBase.owner, hp: 100, maxHp: 100, 
-        type: moduleType, parent: parentBase, angle: angle, lineMesh: lineData.tube, aimAngle: angle 
+        mesh: newBase, position: pos.clone(), owner: parentBase.owner, hp: 100, maxHp: 100,
+        type: moduleType, parent: parentBase, angle: angle, lineMesh: lineData.tube, aimAngle: angle
     };
     
     bases.push(baseObj);
@@ -106,7 +106,7 @@ export function createNewBase(scene, bases, pos, parentBase, moduleType, angle, 
         domeMesh.position.copy(normal.clone().multiplyScalar(PLANET_RADIUS + (BASE_HEIGHT / 2)));
         domeMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
         scene.add(domeMesh);
-        baseObj.domeMesh = domeMesh; 
+        baseObj.domeMesh = domeMesh;
     }
     return baseObj;
 }
@@ -117,8 +117,8 @@ export function destroyBaseAndChain(scene, bases, base, onGameOver) {
 
     scene.remove(base.mesh);
     if (base.lineMesh) scene.remove(base.lineMesh);
-    if (base.domeMesh) scene.remove(base.domeMesh); 
-    if (base.healthSprite) scene.remove(base.healthSprite); 
+    if (base.domeMesh) scene.remove(base.domeMesh);
+    if (base.healthSprite) scene.remove(base.healthSprite);
     
     const index = bases.indexOf(base);
     if (index > -1) bases.splice(index, 1);
