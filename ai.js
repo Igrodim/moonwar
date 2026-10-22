@@ -3,13 +3,11 @@ import { canShoot, executeShot } from './combat.js';
 export function playAITurn(gameContext) {
     const { scene, bases, currentPlayer, playerEnergy, playerGenerators, onTurnEnd, onGameOver, updateUI, updateFog } = gameContext;
 
-    // 1. Начисляем энергию ОДИН раз
     const minRoll = 5 + playerGenerators[currentPlayer];
     const maxRoll = 8 + playerGenerators[currentPlayer];
     playerEnergy[currentPlayer] += Math.floor(Math.random() * (maxRoll - minRoll + 1)) + minRoll;
     if (updateUI) updateUI();
 
-    // 2. Один выстрел и конец хода
     setTimeout(() => {
         let myBases = bases.filter(b => b.owner === currentPlayer && (b.type === 'hub' || b.type === 'relay'));
         if (myBases.length > 0 && playerEnergy[currentPlayer] >= 1) {
