@@ -1,5 +1,5 @@
 import { createPlanet } from './planet.js';
-import { initGame } from './game.js';
+import { initGame, updateCameraTilt } from './game.js'; // ДОБАВЛЕН ИМПОРТ
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
@@ -38,6 +38,7 @@ window.addEventListener('resize', () => {
 
 function animate() {
     requestAnimationFrame(animate);
+    updateCameraTilt(); // ДОБАВЛЕН ВЫЗОВ
     controls.update();
     renderer.render(scene, camera);
 }
