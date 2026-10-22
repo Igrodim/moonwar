@@ -42,18 +42,20 @@ export function updateCameraTilt() {
     if (!selectedBase || isAITurn) return;
     
     const dist = camera.position.distanceTo(controls.target);
-    const minDist = 1.5;  // Ближняя дистанция (угол 65 к поверхности)
-    const maxDist = 15;   // Дальняя дистанция (угол 90 к поверхности)
+    const minDist = 1.5;  // Ближняя дистанция
+    const maxDist = 20;   // Дальняя дистанция
 
     let t = (dist - minDist) / (maxDist - minDist);
     t = Math.max(0, Math.min(1, t));
 
-    // 25 градусов от нормали (65 к поверхности) вблизи, 0 градусов (90 к поверхности) вдали
-    const targetPhi = (25 * Math.PI / 180) * (1 - t);
+    // От 2 градусов (почти 90 к поверхности) вдали до 25 градусов (65 к поверхности) вблизи
+    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t));
 
-    // OrbitControls будет плавно тянуть камеру к этому углу благодаря damping
-    controls.minPolarAngle = targetPhi;
-    controls.maxPolarAngle = targetPhi;
+    // Ограничиваем полярный угол. Зазор 0.005 нужен, чтобы OrbitControls не блокировал вращение A/D
+    if (Math.abs(controls.minPolarAngle - targetPhi) > 0.001) {
+        controls.minPolarAngle = targetPhi - 0.005;
+        controls.maxPolarAngle = targetPhi + 0.005;
+    }
 }
 
 // ИНИЦИАЛИЗАЦИЯ КАМЕРЫ ПРИ ВЫБОРЕ БАЗЫ
@@ -63,12 +65,12 @@ function centerCameraOnBase(base) {
     // Привязываем верх камеры к нормали базы
     camera.up.copy(normal);
     
-    // Ставим камеру на расстоянии 15 единиц (далеко, значит вид строго сверху 90 градусов)
-    camera.position.copy(base.position).add(normal.clone().multiplyScalar(15));
+    // Ставим камеру на 20 единиц (вид почти 90 градусов)
+    camera.position.copy(base.position).add(normal.clone().multiplyScalar(20));
     controls.target.copy(base.position);
     
-    controls.minPolarAngle = 0;
-    controls.maxPolarAngle = 0;
+    controls.minPolarAngle = THREE.MathUtils.degToRad(2);
+    controls.maxPolarAngle = THREE.MathUtils.degToRad(2);
 
     controls.update();
 }
@@ -267,14 +269,15 @@ function setupEventListeners() {
     });
 }
 
+// ИСПРАВЛЕННАЯ ФУНКЦИЯ ВРАЩЕНИЯ
 function rotateCameraAroundTarget(angle) {
     if (!selectedBase) return;
-    const target = selectedBase.position;
-    const normal = target.clone().normalize(); 
     
-    const offset = camera.position.clone().sub(target);
-    offset.applyAxisAngle(normal, angle);
-    camera.position.copy(target).add(offset);
+    // Временно включаем вращение для OrbitControls, чтобы он использовал camera.up как ось
+    const wasEnabled = controls.enableRotate;
+    controls.enableRotate = true;
+    controls.rotateLeft(angle);
+    controls.enableRotate = wasEnabled;
     
     controls.update();
 }
