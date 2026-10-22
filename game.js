@@ -22,6 +22,8 @@ let selectedModuleType = null;
 let gameOver = false;
 let isAITurn = false;
 
+let fogMat;
+
 export function initGame(_scene, _camera, _controls) {
     scene = _scene;
     camera = _camera;
@@ -31,15 +33,69 @@ export function initGame(_scene, _camera, _controls) {
     arrowHelper.visible = false;
     scene.add(arrowHelper);
 
+    setupFogOfWar();
     setupEventListeners();
+}
+
+function setupFogOfWar() {
+    const fogGeo = new THREE.SphereGeometry(PLANET_RADIUS + 0.5, 64, 64);
+    
+    fogMat = new THREE.ShaderMaterial({
+        uniforms: {
+            uSources: { value: Array(50).fill(null).map(() => new THREE.Vector4(0, 0, 0, -1)) },
+            uCount: { value: 0 }
+        },
+        vertexShader: `
+            varying vec3 vPos;
+            void main() {
+                vPos = position;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `,
+        fragmentShader: `
+            varying vec3 vPos;
+            uniform vec4 uSources[50];
+            uniform int uCount;
+            void main() {
+                vec3 normPos = normalize(vPos);
+                float alpha = 0.98; 
+                
+                for(int i = 0; i < 50; i++) {
+                    if(i >= uCount) break;
+                    vec3 src = normalize(uSources[i].xyz);
+                    float dist = distance(normPos, src);
+                    
+                    float localAlpha = smoothstep(uSources[i].w, uSources[i].w + 0.02, dist);
+                    alpha = min(alpha, localAlpha * 0.98);
+                }
+                gl_FragColor = vec4(0.0, 0.0, 0.0, alpha); 
+            }
+        `,
+        transparent: true,
+        depthWrite: false,
+        depthTest: false
+    });
+    
+    const fogMesh = new THREE.Mesh(fogGeo, fogMat);
+    fogMesh.renderOrder = 999;
+    scene.add(fogMesh);
 }
 
 export function updateFogOfWar() {
     if (gameOver) return;
-    const myBases = bases.filter(b => b.owner === currentPlayer);
+    const myBases = bases.filter(b => b.owner === 1);
     
+    let count = 0;
+    for (let i = 0; i < myBases.length && i < 50; i++) {
+        let base = myBases[i];
+        let r = (base.visionRadius || VISION_RADIUS) / PLANET_RADIUS;
+        fogMat.uniforms.uSources.value[i].set(base.position.x, base.position.y, base.position.z, r);
+        count++;
+    }
+    fogMat.uniforms.uCount.value = count;
+
     bases.forEach(base => {
-        if (base.owner === currentPlayer) {
+        if (base.owner === 1) {
             base.mesh.visible = true;
             if (base.lineMesh) base.lineMesh.visible = true;
             if (base.domeMesh) base.domeMesh.visible = true;
@@ -64,6 +120,16 @@ export function updateFogOfWar() {
 }
 
 function setupEventListeners() {
+    window.addEventListener('keydown', (e) => {
+        if (isAITurn || gameOver || !selectedBase) return;
+        const key = e.key.toLowerCase();
+        if (key === 'a' || key === 'ф') {
+            rotateCameraAroundTarget(-Math.PI / 18); 
+        } else if (key === 'd' || key === 'в') {
+            rotateCameraAroundTarget(Math.PI / 18);
+        }
+    });
+
     uiElements.spinBtn.addEventListener('click', () => {
         if (hasSpunThisTurn || gameOver || isAITurn) return;
         spinEnergy();
@@ -132,7 +198,9 @@ function setupEventListeners() {
                 executeShot(scene, bases, selectedBase, check.snappedAngle, power, selectedModuleType, check.sector, playerGenerators, 
                     (genCount) => alert(`Генератор! Твоя выработка: от ${5 + genCount} до ${8 + genCount}`),
                     (owner) => endGame(owner),
-                    () => updateFogOfWar() 
+                    () => updateFogOfWar(),
+                    1, 
+                    VISION_RADIUS
                 );
             } else if (power > 0) {
                 alert("Не хватает энергии!");
@@ -152,6 +220,22 @@ function setupEventListeners() {
         uiElements.startScreen.style.display = 'none';
         startGame();
     });
+}
+
+function rotateCameraAroundTarget(angle) {
+    if (!selectedBase) return;
+    const target = selectedBase.position;
+    const normal = target.clone().normalize(); 
+    
+    // Вращаем позицию камеры
+    const offset = camera.position.clone().sub(target);
+    offset.applyAxisAngle(normal, angle);
+    camera.position.copy(target).add(offset);
+    
+    // Вращаем вектор "верха" камеры, чтобы она не кувыркалась
+    camera.up.applyAxisAngle(normal, angle);
+    
+    controls.update();
 }
 
 function getModuleCost(type) {
@@ -223,12 +307,6 @@ function endTurn() {
         isAITurn = false;
         uiElements.bottomPanel.style.pointerEvents = 'auto';
         uiElements.bottomPanel.style.opacity = '1';
-        let hub = bases.find(b => b.owner === 1 && b.type === 'hub');
-        if (hub) {
-            camera.position.copy(hub.position.clone().normalize().multiplyScalar(PLANET_RADIUS + 10));
-            controls.target.copy(hub.position);
-            controls.update();
-        }
     }
 }
 
@@ -266,6 +344,8 @@ function startGame() {
         if (p === 1) {
             camera.position.copy(pos.clone().normalize().multiplyScalar(PLANET_RADIUS + 10));
             controls.target.copy(pos);
+            // Выравниваем верх камеры по нормали базы
+            camera.up.copy(pos.clone().normalize()); 
             controls.update();
             selectedBase = baseObj;
             uiElements.uiPanel.style.display = 'block';
@@ -316,6 +396,10 @@ function setupRaycaster() {
 
             selectedBase = clickedBase;
             controls.target.copy(selectedBase.position);
+            // Обновляем верх камеры для новой базы
+            camera.up.copy(selectedBase.position.clone().normalize()); 
+            controls.update();
+            
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(selectedBase.position);
             currentAngle = 0;
