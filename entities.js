@@ -1,18 +1,13 @@
 export const PLANET_RADIUS = 10;
 export const BASE_HEIGHT = 0.1;
-export const DOME_RADIUS = 0.35;
-export const AAO_RADIUS = 0.35; 
-export const VISION_RADIUS = 0.75;        
-export const RECON_VISION_RADIUS = 1.5;   
+export const VISION_RADIUS = 2.0;
 
-// Генерация 32 уникальных цветов
 export const playerColors = [];
 for (let i = 0; i < 32; i++) {
     const color = new THREE.Color().setHSL(i / 32, 0.8, 0.6);
     playerColors.push(color.getHex());
 }
 
-// Выбор геометрии в зависимости от типа модуля
 export function getGeometry(type) {
     if (type === 'aao') return new THREE.CylinderGeometry(0.06, 0.06, BASE_HEIGHT, 3);
     if (type === 'generator') return new THREE.BoxGeometry(0.08, BASE_HEIGHT, 0.08);
@@ -20,7 +15,6 @@ export function getGeometry(type) {
     return new THREE.CylinderGeometry(0.05, 0.05, BASE_HEIGHT, 16);
 }
 
-// Установка объекта на поверхность сферы
 export function layFlatOnSphere(mesh, position) {
     const normal = position.clone().normalize();
     const offsetPos = normal.clone().multiplyScalar(PLANET_RADIUS + (BASE_HEIGHT / 2));
@@ -28,7 +22,6 @@ export function layFlatOnSphere(mesh, position) {
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
 }
 
-// Создание плашки здоровья
 export function createHealthBar(scene, base) {
     const canvas = document.createElement('canvas');
     canvas.width = 128;
@@ -44,41 +37,29 @@ export function createHealthBar(scene, base) {
     sprite.position.copy(base.position).add(normal.clone().multiplyScalar(0.2));
     
     base.healthSprite = sprite;
-    base.healthCanvas = canvas;
     base.healthCtx = ctx;
     base.healthTex = tex;
     scene.add(sprite);
-    
-    updateHealthBar(base); 
+    updateHealthBar(base);
 }
 
-// Обновление плашки здоровья (цвет и текст)
 export function updateHealthBar(base) {
     if (!base.healthSprite) return;
-    const ctx = base.healthCtx;
     const percent = Math.max(0, Math.floor((base.hp / base.maxHp) * 100));
-    
+    const ctx = base.healthCtx;
     ctx.clearRect(0, 0, 128, 32);
-    
-    // Черная обводка
     ctx.fillStyle = 'rgba(0,0,0,0.8)';
     ctx.fillRect(0, 0, 128, 32);
-    
-    // Цвет в зависимости от здоровья
     ctx.fillStyle = percent > 50 ? '#00ff00' : (percent > 25 ? '#ffaa00' : '#ff0000');
     ctx.fillRect(2, 2, 124, 28);
-    
-    // Текст процентов
     ctx.fillStyle = '#000';
     ctx.font = 'bold 20px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(`${percent}%`, 64, 16);
-    
     base.healthTex.needsUpdate = true;
 }
 
-// Создание энергетической линии (трубы)
 export function createEnergyLine(scene, startPos, endPos, owner) {
     const midPoint = startPos.clone().lerp(endPos, 0.5);
     const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + 0.3);
@@ -88,15 +69,11 @@ export function createEnergyLine(scene, startPos, endPos, owner) {
     const tubeMaterial = new THREE.MeshBasicMaterial({ color: playerColors[owner - 1] });
     const tube = new THREE.Mesh(tubeGeometry, tubeMaterial);
     scene.add(tube);
-    
     return { tube, curve };
 }
 
-// Создание новой базы (вызывается из combat.js при приземлении)
 export function createNewBase(scene, bases, pos, parentBase, moduleType, angle, playerGenerators, onGeneratorBuilt) {
-    const playerColor = playerColors[parentBase.owner - 1];
-    let newBaseColor = playerColor;
-    
+    let newBaseColor = playerColors[parentBase.owner - 1];
     if (moduleType === 'generator') newBaseColor = 0x00ff00; 
     if (moduleType === 'dome') newBaseColor = 0xffff00; 
     if (moduleType === 'aao') newBaseColor = 0xff00ff; 
@@ -109,23 +86,10 @@ export function createNewBase(scene, bases, pos, parentBase, moduleType, angle, 
     const lineData = createEnergyLine(scene, parentBase.position, pos, parentBase.owner);
 
     const baseObj = { 
-        mesh: newBase, 
-        position: pos.clone(), 
-        owner: parentBase.owner, 
-        hp: 100, 
-        maxHp: 100, 
-        type: moduleType, 
-        parent: parentBase, 
-        angle: angle, 
-        lineMesh: lineData.tube,
-        curve: lineData.curve,
-        visionRadius: moduleType === 'drone' ? RECON_VISION_RADIUS : VISION_RADIUS,
-        aimAngle: angle // Сохраняем угол, под которым построили базу
+        mesh: newBase, position: pos.clone(), owner: parentBase.owner, hp: 100, maxHp: 100, 
+        type: moduleType, parent: parentBase, angle: angle, lineMesh: lineData.tube, aimAngle: angle 
     };
     
-    if (moduleType === 'dome') { baseObj.shieldHits = 0; baseObj.isDisabled = false; }
-    if (moduleType === 'aao') { baseObj.isActive = true; }
-
     bases.push(baseObj);
     createHealthBar(scene, baseObj);
 
@@ -135,7 +99,7 @@ export function createNewBase(scene, bases, pos, parentBase, moduleType, angle, 
     }
     
     if (moduleType === 'dome') {
-        const domeGeo = new THREE.SphereGeometry(DOME_RADIUS, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2);
+        const domeGeo = new THREE.SphereGeometry(0.35, 32, 32, 0, Math.PI * 2, 0, Math.PI / 2);
         const domeMat = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.2, side: THREE.DoubleSide });
         const domeMesh = new THREE.Mesh(domeGeo, domeMat);
         const normal = pos.clone().normalize();
@@ -147,7 +111,6 @@ export function createNewBase(scene, bases, pos, parentBase, moduleType, angle, 
     return baseObj;
 }
 
-// Уничтожение базы и всей её цепочки
 export function destroyBaseAndChain(scene, bases, base, onGameOver) {
     const children = bases.filter(b => b.parent === base);
     children.forEach(child => destroyBaseAndChain(scene, bases, child, onGameOver));
@@ -160,7 +123,5 @@ export function destroyBaseAndChain(scene, bases, base, onGameOver) {
     const index = bases.indexOf(base);
     if (index > -1) bases.splice(index, 1);
 
-    if (base.type === 'hub') {
-        if (onGameOver) onGameOver(base.owner);
-    }
+    if (base.type === 'hub' && onGameOver) onGameOver(base.owner);
 }
