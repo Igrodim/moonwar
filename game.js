@@ -29,9 +29,15 @@ let fogMat;
 let fogMesh;
 let currentPlanet = null;
 
+// Переменные для плавного перелета
 let cameraTargetPos = new THREE.Vector3();
 let cameraTargetLookAt = new THREE.Vector3();
 let cameraTargetUp = new THREE.Vector3();
+
+let cameraMoveProgress = 0;
+let cameraMoveStartPos = new THREE.Vector3();
+let cameraMoveStartTarget = new THREE.Vector3();
+let cameraMoveStartUp = new THREE.Vector3();
 let isCameraMoving = false;
 
 export function initGame(_scene, _camera, _controls) {
@@ -100,31 +106,41 @@ function smoothCenterCameraOnBase(base) {
     cameraTargetPos.copy(base.position).add(offset);
     cameraTargetLookAt.copy(base.position);
     cameraTargetUp.copy(normal); 
+    
+    // Запоминаем стартовую точку для анимации
+    cameraMoveStartPos.copy(camera.position);
+    cameraMoveStartTarget.copy(controls.target);
+    cameraMoveStartUp.copy(camera.up);
+    
+    cameraMoveProgress = 0;
     isCameraMoving = true;
 }
 
 export function updateCameraAnimation() {
     if (isCameraMoving) {
-        camera.position.lerp(cameraTargetPos, 0.1);
-        controls.target.lerp(cameraTargetLookAt, 0.1);
-        camera.up.lerp(cameraTargetUp, 0.1).normalize();
-        
-        if (camera.position.distanceTo(cameraTargetPos) < 0.05) {
-            camera.position.copy(cameraTargetPos);
-            controls.target.copy(cameraTargetLookAt);
-            camera.up.copy(cameraTargetUp);
+        // Жесткий таймер анимации, чтобы камера никогда не застревала
+        cameraMoveProgress += 0.08; 
+        if (cameraMoveProgress >= 1) {
+            cameraMoveProgress = 1;
             isCameraMoving = false;
         }
+        
+        // Плавная кривая (smoothstep)
+        let t = cameraMoveProgress * cameraMoveProgress * (3 - 2 * cameraMoveProgress);
+        
+        camera.position.lerpVectors(cameraMoveStartPos, cameraTargetPos, t);
+        controls.target.lerpVectors(cameraMoveStartTarget, cameraTargetLookAt, t);
+        camera.up.lerpVectors(cameraMoveStartUp, cameraTargetUp, t).normalize();
     }
 }
 
 function setupFogOfWar() {
-    const fogGeo = new THREE.SphereGeometry(10.02, 64, 64); 
+    // ОПТИМИЗАЦИЯ: Уменьшили полигонаж сферы тумана (64х64 -> 32х32)
+    const fogGeo = new THREE.SphereGeometry(10.02, 32, 32); 
     
     fogMat = new THREE.ShaderMaterial({
         uniforms: {
-            uSources: { value: Array(50).fill(null).map(() => new THREE.Vector4(0, 0, 0, -1)) },
-            uCount: { value: 0 }
+            uSources: { value: Array(50).fill(null).map(() => new THREE.Vector4(0, 0, 0, -1)) }
         },
         vertexShader: `
             varying vec3 vPos;
@@ -136,16 +152,17 @@ function setupFogOfWar() {
         fragmentShader: `
             varying vec3 vPos;
             uniform vec4 uSources[50];
-            uniform int uCount;
             void main() {
                 vec3 normPos = normalize(vPos);
                 float alpha = 0.98; 
+                // ОПТИМИЗАЦИЯ: Убрали break и uCount, используем w > 0
                 for(int i = 0; i < 50; i++) {
-                    if(i >= uCount) break;
-                    vec3 src = normalize(uSources[i].xyz);
-                    float dist = distance(normPos, src);
-                    float localAlpha = smoothstep(uSources[i].w, uSources[i].w + 0.02, dist);
-                    alpha = min(alpha, localAlpha * 0.98);
+                    vec4 srcData = uSources[i];
+                    if (srcData.w > 0.0) {
+                        float dist = distance(normPos, normalize(srcData.xyz));
+                        float localAlpha = smoothstep(srcData.w, srcData.w + 0.02, dist);
+                        alpha = min(alpha, localAlpha * 0.98);
+                    }
                 }
                 gl_FragColor = vec4(0.0, 0.0, 0.0, alpha); 
             }
@@ -161,14 +178,17 @@ export function updateFogOfWar() {
     if (gameOver) return;
     const myBases = bases.filter(b => b.owner === 1);
     
-    let count = 0;
+    // Очищаем все слоты
+    for (let i = 0; i < 50; i++) {
+        fogMat.uniforms.uSources.value[i].set(0, 0, 0, -1);
+    }
+    
+    // Заполняем активные базы
     for (let i = 0; i < myBases.length && i < 50; i++) {
         let base = myBases[i];
         let r = (base.visionRadius || VISION_RADIUS) / PLANET_RADIUS; 
         fogMat.uniforms.uSources.value[i].set(base.position.x, base.position.y, base.position.z, r);
-        count++;
     }
-    fogMat.uniforms.uCount.value = count;
 
     bases.forEach(base => {
         if (base.owner === 1) {
@@ -329,7 +349,7 @@ function setupEventListeners() {
     });
 }
 
-// ВРАЩЕНИЕ КАМЕРЫ (ОРИГИНАЛЬНАЯ ЛОГИКА)
+// ОПТИМИЗИРОВАННОЕ ВРАЩЕНИЕ (работает даже во время перелета)
 function rotateCameraAroundTarget(angle) {
     if (!selectedBase) return;
     
@@ -338,17 +358,24 @@ function rotateCameraAroundTarget(angle) {
     const target = selectedBase.position;
     const normal = target.clone().normalize();
 
+    // Вращаем текущую камеру
+    const offset = camera.position.clone().sub(target);
+    offset.applyAxisAngle(normal, angle);
+    camera.position.copy(target).add(offset);
+    camera.up.applyAxisAngle(normal, angle);
+    
+    // Если идет перелет, вращаем и точку назначения
     if (isCameraMoving) {
-        // Если камера летит, вращаем точку назначения
         const targetOffset = cameraTargetPos.clone().sub(target);
         targetOffset.applyAxisAngle(normal, angle);
         cameraTargetPos.copy(target).add(targetOffset);
-    } else {
-        // Иначе вращаем текущую камеру
-        const offset = camera.position.clone().sub(target);
-        offset.applyAxisAngle(normal, angle);
-        camera.position.copy(target).add(offset);
-        camera.up.applyAxisAngle(normal, angle);
+        
+        const startOffset = cameraMoveStartPos.clone().sub(target);
+        startOffset.applyAxisAngle(normal, angle);
+        cameraMoveStartPos.copy(target).add(startOffset);
+        
+        cameraTargetUp.applyAxisAngle(normal, angle);
+        cameraMoveStartUp.applyAxisAngle(normal, angle);
     }
     
     controls.update();
