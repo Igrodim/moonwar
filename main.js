@@ -5,7 +5,6 @@ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerH
 camera.position.z = 30;
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-// ОПТИМИЗАЦИЯ: Ограничиваем pixelRatio, чтобы 4K экраны не жрали всю видеопамять
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25)); 
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x000000, 1);
@@ -18,13 +17,13 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
 dirLight.position.set(5, 3, 5);
 scene.add(dirLight);
 
-// Звездный фон
+// ОПТИМИЗАЦИЯ ЗВЕЗД: Уменьшили количество и убрали тяжелое AdditiveBlending
 const starsGeometry = new THREE.BufferGeometry();
-const starsCount = 5000;
+const starsCount = 2000; 
 const posArray = new Float32Array(starsCount * 3);
 for (let i = 0; i < starsCount * 3; i++) { posArray[i] = (Math.random() - 0.5) * 200; }
 starsGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-const starsMaterial = new THREE.PointsMaterial({ size: 0.15, color: 0xffffff, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending });
+const starsMaterial = new THREE.PointsMaterial({ size: 0.2, color: 0xffffff, transparent: true, opacity: 0.8 });
 const starMesh = new THREE.Points(starsGeometry, starsMaterial);
 scene.add(starMesh);
 
@@ -45,9 +44,19 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-function animate() {
+// ОПТИМИЗАЦИЯ FPS: Ограничиваем частоту кадров до 60
+let lastFrameTime = 0;
+const fpsLimit = 60;
+const interval = 1000 / fpsLimit;
+
+function animate(time) {
     requestAnimationFrame(animate);
-    starMesh.rotation.y += 0.0001; 
+
+    // Если с прошлого кадра прошло меньше 16.6 мс — пропускаем отрисовку
+    if (time - lastFrameTime < interval) return;
+    lastFrameTime = time - ((time - lastFrameTime) % interval);
+
+    starMesh.rotation.y += 0.0002; 
     
     updateCameraAnimation(); 
     controls.update();       
@@ -55,4 +64,4 @@ function animate() {
     
     renderer.render(scene, camera);
 }
-animate();
+requestAnimationFrame(animate);
