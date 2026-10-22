@@ -20,11 +20,11 @@ scene.add(dirLight);
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
-controls.enablePan = false;    // Отключаем сдвиг
-controls.enableRotate = false; // ОТКЛЮЧАЕМ ВРАЩЕНИЕ МЫШЬЮ
+controls.enablePan = false;    
+controls.enableRotate = false; // Вращение только на A/D
 controls.zoomSpeed = 1.2;
-controls.minDistance = 0.1; 
-controls.maxDistance = 30; 
+controls.minDistance = 1.5; 
+controls.maxDistance = 25; 
 
 createPlanet(scene);
 initGame(scene, camera, controls);
@@ -38,9 +38,6 @@ window.addEventListener('resize', () => {
 function animate() {
     requestAnimationFrame(animate);
     controls.update();
-    if (camera.position.length() < 10.02) {
-        camera.position.setLength(10.02);
-    }
     renderer.render(scene, camera);
 }
 animate();
