@@ -1,35 +1,21 @@
-import { PLANET_RADIUS, AAO_RADIUS, createNewBase, destroyBaseAndChain, updateHealthBar } from './entities.js';
+import { PLANET_RADIUS, createNewBase, destroyBaseAndChain, updateHealthBar } from './entities.js';
 
 export function canShoot(bases, startBase, angle, moduleToBuild) {
-    const ANGLE_STEP = 360 / 128; // 2.8125 градусов (128 направлений)
-    const snappedAngle = Math.round(angle / ANGLE_STEP) * ANGLE_STEP;
-    
-    // Приводим угол к диапазону 0-360
-    let finalAngle = snappedAngle % 360;
-    if (finalAngle < 0) finalAngle += 360;
-
+    const finalAngle = Math.round(angle / 11.25) * 11.25 % 360;
     const isBuildingModule = ['relay', 'dome', 'generator', 'aao', 'drone'].includes(moduleToBuild);
     
     if (isBuildingModule) {
-        // Ищем все существующие постройки от этой базы
         const children = bases.filter(b => b.parent === startBase);
-        
         for (let child of children) {
-            // Вычисляем разницу углов
-            let diff = Math.abs(child.aimAngle - finalAngle);
+            let diff = Math.abs(child.angle - finalAngle);
             if (diff > 180) diff = 360 - diff;
-            
-            // Если разница меньше 7 градусов - запрещаем (чтобы не наслаивались)
-            if (diff < 7) {
-                return { allowed: false, reason: "Слишком близко к другому модулю! Выберите другое направление." };
-            }
+            if (diff < 7) return { allowed: false, reason: "Слишком близко к другому модулю!" };
         }
     }
-    
-    return { allowed: true, snappedAngle: finalAngle, sector: 0 };
+    return { allowed: true, snappedAngle: finalAngle };
 }
 
-export function executeShot(scene, bases, startBase, angle, powerValue, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver, onComplete, playerId, VISION_RADIUS) {
+export function executeShot(scene, bases, startBase, angle, powerValue, moduleToBuild, playerGenerators, onGeneratorBuilt, onGameOver, onComplete) {
     const normal = startBase.position.clone().normalize();
     let baseVector = new THREE.Vector3(1, 0, 0);
     if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
@@ -39,51 +25,23 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
     const distance = 0.3 + powerValue * 0.15;
     const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(distance)).normalize().multiplyScalar(PLANET_RADIUS);
 
-    let projectileColor = 0xffaa00;
-    if (moduleToBuild === 'bomb') projectileColor = 0xff0000;
-    if (moduleToBuild === 'homing') projectileColor = 0xff00ff; 
-    if (moduleToBuild === 'drone') projectileColor = 0x00ffff; 
+    let color = 0xffaa00;
+    if (moduleToBuild === 'bomb') color = 0xff0000;
+    if (moduleToBuild === 'homing') color = 0xff00ff; 
 
-    const projectile = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: projectileColor }));
+    const projectile = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), new THREE.MeshBasicMaterial({ color: color }));
     projectile.position.copy(startBase.position);
     scene.add(projectile);
 
     const startTime = performance.now();
     const duration = 1000;
-    const travelDistance = startBase.position.distanceTo(targetPos);
-    const maxHeight = Math.min(travelDistance * 0.2, 0.4);
+    const maxHeight = 0.5;
 
     function animateFlight() {
         const elapsed = performance.now() - startTime;
         let t = elapsed / duration;
         
         if (t <= 1) {
-            if (startBase.owner !== 1) {
-                let visible = false;
-                for (let b of bases) {
-                    if (b.owner === 1 && b.position.distanceTo(projectile.position) < (b.visionRadius || VISION_RADIUS)) {
-                        visible = true;
-                        break;
-                    }
-                }
-                projectile.visible = visible;
-            } else {
-                projectile.visible = true;
-            }
-
-            for (let b of bases) {
-                if (b.type === 'aao' && b.isActive && b.owner !== startBase.owner) {
-                    if (b.position.distanceTo(projectile.position) < AAO_RADIUS) {
-                        b.isActive = false;
-                        b.mesh.material.color.setHex(0x555555); 
-                        explode(scene, bases, projectile.position, 0, 0.1, null, onGameOver); 
-                        scene.remove(projectile);
-                        if (onComplete) onComplete();
-                        return; 
-                    }
-                }
-            }
-
             const surfacePoint = new THREE.Vector3().copy(startBase.position).lerp(targetPos, t).normalize().multiplyScalar(PLANET_RADIUS);
             const heightOffset = Math.sin(t * Math.PI) * maxHeight;
             const norm = surfacePoint.clone().normalize();
@@ -91,80 +49,25 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
             requestAnimationFrame(animateFlight);
         } else {
             scene.remove(projectile);
-            handleLanding(scene, bases, targetPos, startBase, moduleToBuild, angle, playerGenerators, onGeneratorBuilt, onGameOver); 
-            if (onComplete) onComplete();
+            try {
+                handleLanding(scene, bases, targetPos, startBase, moduleToBuild, angle, playerGenerators, onGeneratorBuilt, onGameOver); 
+            } finally {
+                if (onComplete) onComplete();
+            }
         }
     }
     animateFlight();
 }
 
-export function checkLineIntersection(bases, startPos, endPos, parentBase) {
-    const midPoint = startPos.clone().lerp(endPos, 0.5);
-    const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + 0.3);
-    const newCurve = new THREE.QuadraticBezierCurve3(startPos, controlPoint, endPos);
-    const newPoints = newCurve.getPoints(20);
-
-    for (let b of bases) {
-        if (!b.parent || !b.curve) continue; 
-        if (b.parent === parentBase) continue; 
-        
-        const existingPoints = b.curve.getPoints(20);
-        for (let p1 of newPoints) {
-            if (p1.distanceTo(startPos) < 0.25) continue; 
-            for (let p2 of existingPoints) {
-                if (p2.distanceTo(startPos) < 0.25) continue; 
-                if (p1.distanceTo(p2) < 0.06) return true;
-            }
-        }
-    }
-    return false;
-}
-
 function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, angle, playerGenerators, onGeneratorBuilt, onGameOver) {
-    let domeInRange = bases.find(b => b.type === 'dome' && b.owner !== parentBase.owner && b.position.distanceTo(targetPos) < 0.35);
+    if (moduleToBuild === 'bomb') { explode(scene, bases, targetPos, 25, onGameOver); return; }
+    if (moduleToBuild === 'homing') { explode(scene, bases, targetPos, 50, onGameOver); return; }
 
-    if (domeInRange && !domeInRange.isDisabled) {
-        if (moduleToBuild === 'bomb') domeInRange.shieldHits += 1;
-        if (moduleToBuild === 'homing') domeInRange.shieldHits += 2;
-        if (domeInRange.shieldHits >= 2) {
-            domeInRange.isDisabled = true;
-            if (domeInRange.domeMesh) domeInRange.domeMesh.visible = false;
-        }
-        explode(scene, bases, targetPos, 0, 0.1, null, onGameOver);
-        return; 
-    }
-
-    if (moduleToBuild === 'bomb') { explode(scene, bases, targetPos, 25, 0.20, null, onGameOver); return; }
-    if (moduleToBuild === 'homing') { explode(scene, bases, targetPos, 50, 0.30, null, onGameOver); return; }
-
-    if (checkLineIntersection(bases, parentBase.position, targetPos, parentBase)) {
-        explode(scene, bases, targetPos, 25, 0.30, null, onGameOver); 
-        return;
-    }
-
-    let collision = false;
-    for (let b of bases) {
-        if (b === parentBase) continue; 
-        if (b.position.distanceTo(targetPos) < 0.2) { 
-            collision = true;
-            explode(scene, bases, targetPos, 25, 0.30, null, onGameOver);
-            b.hp -= 25; 
-            updateHealthBar(b);
-            if (b.hp <= 0) destroyBaseAndChain(scene, bases, b, onGameOver);
-            break;
-        }
-    }
-
-    if (!collision) {
-        createNewBase(scene, bases, targetPos, parentBase, moduleToBuild, angle, playerGenerators, onGeneratorBuilt);
-    }
+    createNewBase(scene, bases, targetPos, parentBase, moduleToBuild, angle, playerGenerators, onGeneratorBuilt);
 }
 
-export function explode(scene, bases, pos, damage, radius, owner, onGameOver) {
-    const explosionGeo = new THREE.SphereGeometry(0.1, 16, 16);
-    const explosionMat = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 1 });
-    const explosion = new THREE.Mesh(explosionGeo, explosionMat);
-    
+export function explode(scene, bases, pos, damage, onGameOver) {
+    const explosion = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 1 }));
     const explosionCenter = pos.clone().normalize().multiplyScalar(PLANET_RADIUS);
     explosion.position.copy(explosionCenter);
     scene.add(explosion);
@@ -173,56 +76,19 @@ export function explode(scene, bases, pos, damage, radius, owner, onGameOver) {
     const interval = setInterval(() => {
         scale += 0.1;
         explosion.scale.set(scale, scale, scale);
-        explosionMat.opacity -= 0.05;
-        if (explosionMat.opacity <= 0) {
+        explosion.material.opacity -= 0.05;
+        if (explosion.material.opacity <= 0) {
             clearInterval(interval);
             scene.remove(explosion);
         }
     }, 30);
 
-    if (damage === 0) return; 
-
     const basesCopy = [...bases];
     for (let b of basesCopy) {
-        if (b.position.distanceTo(explosionCenter) < radius) { 
+        if (b.position.distanceTo(explosionCenter) < 0.5) { 
             b.hp -= damage;
             updateHealthBar(b);
-            showDamageText(scene, b.position, damage);
             if (b.hp <= 0) destroyBaseAndChain(scene, bases, b, onGameOver);
         }
     }
-}
-
-function showDamageText(scene, position, damage) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 64;
-    const context = canvas.getContext('2d');
-    context.fillStyle = '#ff0000'; 
-    context.font = 'bold 40px Arial';
-    context.textAlign = 'center';
-    context.fillText(`-${damage}`, 64, 40);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
-    const sprite = new THREE.Sprite(material);
-    
-    const normal = position.clone().normalize();
-    sprite.position.copy(position).add(normal.multiplyScalar(0.3));
-    
-    sprite.scale.set(0.5, 0.25, 1);
-    scene.add(sprite);
-
-    let life = 1;
-    const animateText = () => {
-        if (life <= 0) {
-            scene.remove(sprite);
-            return;
-        }
-        life -= 0.02;
-        sprite.position.add(normal.clone().multiplyScalar(0.01)); 
-        sprite.material.opacity = life;
-        requestAnimationFrame(animateText);
-    };
-    animateText();
 }
