@@ -1,4 +1,4 @@
-import { PLANET_RADIUS, AAO_RADIUS, createNewBase, destroyBaseAndChain } from './entities.js'; // AAO_RADIUS нужно добавить в entities.js
+import { PLANET_RADIUS, AAO_RADIUS, createNewBase, destroyBaseAndChain } from './entities.js';
 
 export function canShoot(bases, startBase, angle, moduleToBuild) {
     const ANGLE_STEP = 22.5;
@@ -6,12 +6,62 @@ export function canShoot(bases, startBase, angle, moduleToBuild) {
     let sector = Math.round(snappedAngle / ANGLE_STEP) % 16;
     if (sector < 0) sector += 16; 
 
+    // 1. Проверка на занятый сектор (для строительных модулей)
     const isBuildingModule = ['relay', 'dome', 'generator', 'aao'].includes(moduleToBuild);
     if (isBuildingModule) {
         const existingBuild = bases.find(b => b.parent === startBase && b.sector === sector);
         if (existingBuild) return { allowed: false, reason: "В этом направлении уже построен модуль!" };
     }
+
+    // 2. Проверка на пересечение линий (только для строительных модулей, т.к. бомбы летят по воздуху)
+    // Но мы сделаем проверку для всех, чтобы новые линии не пересекались.
+    if (isBuildingModule) {
+        const distance = powerValueToDistance(startBase, snappedAngle, 10); // max power для проверки
+        const targetPos = startBase.position.clone().add(getTangent(startBase.position, snappedAngle).multiplyScalar(distance)).normalize().multiplyScalar(PLANET_RADIUS);
+        
+        // Проверяем расстояние до всех существующих линий
+        for (let b of bases) {
+            if (!b.parent) continue; // У главного хаба нет входящей линии
+            
+            // Получаем 3D позиции начала и конца существующей линии
+            const lineStart = b.parent.position;
+            const lineEnd = b.position;
+            
+            // Проверяем расстояние от нашей целевой точки до этой линии
+            const distToLine = distanceToSegment(targetPos, lineStart, lineEnd);
+            
+            // Если расстояние слишком маленькое, линии пересекутся
+            if (distToLine < 0.25) {
+                return { allowed: false, reason: "Линии энергосети пересекаются!" };
+            }
+        }
+    }
+
     return { allowed: true, snappedAngle: snappedAngle, sector: sector };
+}
+
+// Вспомогательные математические функции для проверки линий
+function powerValueToDistance(startBase, angle, power) {
+    return power * 0.15;
+}
+
+function getTangent(position, angle) {
+    const normal = position.clone().normalize();
+    let baseVector = new THREE.Vector3(1, 0, 0);
+    if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
+    let tangent = baseVector.cross(normal).normalize();
+    tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(angle));
+    return tangent;
+}
+
+function distanceToSegment(p, a, b) {
+    const ab = new THREE.Vector3().subVectors(b, a);
+    const ap = new THREE.Vector3().subVectors(p, a);
+    const t = ap.dot(ab) / ab.lengthSq();
+    if (t < 0) return p.distanceTo(a);
+    if (t > 1) return p.distanceTo(b);
+    const projection = new THREE.Vector3().copy(a).add(ab.multiplyScalar(t));
+    return p.distanceTo(projection);
 }
 
 export function executeShot(scene, bases, startBase, angle, powerValue, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver, onComplete) {
@@ -132,10 +182,48 @@ export function explode(scene, bases, pos, damage, radius, owner, onGameOver) {
     for (let b of basesCopy) {
         if (b.position.distanceTo(explosionCenter) < radius) { 
             b.hp -= damage;
-            if (b.owner === 1) alert(`Попадание! Урон: ${damage}. HP базы: ${b.hp}`);
+            // Вызов всплывающего текста
+            showDamageText(scene, b.position, damage);
+            
             if (b.hp <= 0) {
                 destroyBaseAndChain(scene, bases, b, onGameOver);
             }
         }
     }
+}
+
+// Функция для создания всплывающего текста
+function showDamageText(scene, position, damage) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 64;
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#ff0000'; // Красный цвет
+    context.font = 'bold 40px Arial';
+    context.textAlign = 'center';
+    context.fillText(`-${damage}`, 64, 40);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+    const sprite = new THREE.Sprite(material);
+    
+    // Позиция чуть выше базы
+    const normal = position.clone().normalize();
+    sprite.position.copy(position).add(normal.multiplyScalar(0.3));
+    
+    sprite.scale.set(0.5, 0.25, 1);
+    scene.add(sprite);
+
+    let life = 1;
+    const animateText = () => {
+        if (life <= 0) {
+            scene.remove(sprite);
+            return;
+        }
+        life -= 0.02;
+        sprite.position.add(normal.clone().multiplyScalar(0.01)); // Летит вверх
+        sprite.material.opacity = life;
+        requestAnimationFrame(animateText);
+    };
+    animateText();
 }
