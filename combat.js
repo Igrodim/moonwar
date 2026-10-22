@@ -27,7 +27,7 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
     let projectileColor = 0xffaa00;
     if (moduleToBuild === 'bomb') projectileColor = 0xff0000;
     if (moduleToBuild === 'homing') projectileColor = 0xff00ff; 
-    if (moduleToBuild === 'drone') projectileColor = 0x00ffff; // Синий снаряд радара
+    if (moduleToBuild === 'drone') projectileColor = 0x00ffff; 
 
     const projectile = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: projectileColor }));
     projectile.position.copy(startBase.position);
