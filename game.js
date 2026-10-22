@@ -1,4 +1,4 @@
-import { PLANET_RADIUS, playerColors, getGeometry, layFlatOnSphere, VISION_RADIUS, createHealthBar, setPlanetRadius } from './entities.js';
+import { PLANET_RADIUS, playerColors, getGeometry, layFlatOnSphere, VISION_RADIUS, createHealthBar, setPlanetRadius, updateHealthBar } from './entities.js';
 import { executeShot, canShoot } from './combat.js';
 import { playAITurn } from './ai.js';
 import { uiElements, updateUI, clearSelection } from './ui.js';
@@ -131,9 +131,7 @@ export function updateCameraAnimation() {
     }
 }
 
-// ОПТИМИЗИРОВАННЫЙ ШЕЙДЕРНЫЙ ТУМАН
 function setupFogOfWar() {
-    // 64x64 полигонов достаточно для ровных краев
     const fogGeo = new THREE.SphereGeometry(10.02, 64, 64); 
     
     fogMat = new THREE.ShaderMaterial({
@@ -152,15 +150,12 @@ function setupFogOfWar() {
             uniform vec4 uSources[32];
             void main() {
                 vec3 normPos = normalize(vPos);
-                float alpha = 1.0; // Базовая непрозрачность тумана
+                float alpha = 1.0; 
                 
                 for(int i = 0; i < 32; i++) {
                     if (uSources[i].w > 0.0) {
                         vec3 src = normalize(uSources[i].xyz);
-                        // Считаем расстояние между точками на сфере
                         float dist = distance(normPos, src);
-                        
-                        // Плавный переход от видимости к туману
                         float localAlpha = smoothstep(uSources[i].w, uSources[i].w + 0.03, dist);
                         alpha = min(alpha, localAlpha);
                     }
@@ -182,12 +177,10 @@ export function updateFogOfWar() {
     if (gameOver) return;
     const myBases = bases.filter(b => b.owner === 1);
     
-    // Очищаем все 32 слота перед заполнением
     for (let i = 0; i < 32; i++) {
         fogMat.uniforms.uSources.value[i].set(0, 0, 0, -1);
     }
     
-    // Заполняем позициями наших баз
     for (let i = 0; i < myBases.length && i < 32; i++) {
         let base = myBases[i];
         let r = (base.visionRadius || VISION_RADIUS) / PLANET_RADIUS; 
@@ -566,13 +559,30 @@ function setupRaycaster() {
             const clickedMesh = intersects[0].object;
             const clickedBase = bases.find(b => b.mesh === clickedMesh);
             
+            // ИСПРАВЛЕНИЕ: Лечение
             if (selectedModuleType === 'heal') {
-                if (clickedBase.owner === currentPlayer && playerEnergy[currentPlayer] >= 1) {
-                    clickedBase.hp = Math.min(clickedBase.maxHp, clickedBase.hp + 25);
-                    playerEnergy[currentPlayer] -= 1;
-                    updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
-                    window.showMessage("УСПЕХ", `База вылечена! HP: ${clickedBase.hp}`);
-                } else { window.showMessage("ОШИБКА", "Нельзя лечить или не хватает энергии!"); }
+                if (clickedBase.owner !== currentPlayer) {
+                    window.showMessage("ОШИБКА", "Это не ваша база!");
+                    return;
+                }
+                if (clickedBase.hp >= clickedBase.maxHp) {
+                    window.showMessage("ВНИМАНИЕ", "У базы уже максимальное здоровье!");
+                    return;
+                }
+                if (playerEnergy[currentPlayer] < 1) {
+                    window.showMessage("ОШИБКА", "Не хватает энергии!");
+                    return;
+                }
+
+                // Лечим
+                clickedBase.hp = Math.min(clickedBase.maxHp, clickedBase.hp + 25);
+                playerEnergy[currentPlayer] -= 1;
+                
+                // Обновляем интерфейс и шкалу ХП
+                updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
+                updateHealthBar(clickedBase);
+                
+                window.showMessage("УСПЕХ", `База вылечена! HP: ${clickedBase.hp}%`);
                 return;
             }
 
