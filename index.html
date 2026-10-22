@@ -10,7 +10,7 @@
         /* --- ОБЩИЕ ЭЛЕМЕНТЫ --- */
         #top-info { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); padding: 10px 20px; border-radius: 8px; border: 1px solid #4a4a6a; z-index: 10; }
         #turn-text { font-size: 20px; font-weight: bold; color: #00aaff; text-shadow: 0 0 10px #00aaff; }
-        #energy-text { font-size: 18px; margin-top: 5px; color: #ffaa00; text-shadow: 0 0 10px #ffaa00; }
+        #energy-text { font-size: 18px; margin-top: 5px; color: #00aaff; text-shadow: 0 0 10px #00aaff; }
 
         #bottom-panel {
             position: absolute; bottom: 0; left: 0; width: 100%; height: 120px;
@@ -21,15 +21,23 @@
 
         #energy-wheel-container { display: flex; align-items: center; gap: 15px; }
         
+        /* Стилизация кнопки энергии */
         #spin-btn {
-            background: #ffaa00; color: black; font-weight: 900; font-size: 32px;
-            padding: 15px; border-radius: 50%; width: 80px; height: 80px; border: 3px solid #fff; cursor: pointer; transition: all 0.2s;
+            background: #1a1a2e; color: #00aaff; font-weight: 900; font-size: 32px;
+            padding: 15px; border-radius: 50%; width: 80px; height: 80px; border: 2px solid #00aaff; cursor: pointer;
             display: flex; justify-content: center; align-items: center; font-family: 'Orbitron', sans-serif;
-            box-shadow: 0 0 15px rgba(255, 170, 0, 0.5);
+            transition: all 0.2s;
         }
-        #spin-btn:hover:not(:disabled) { transform: scale(1.05); box-shadow: 0 0 25px rgba(255, 170, 0, 0.8); }
-        #spin-btn:active { transform: scale(0.95); }
-        #spin-btn:disabled { background: #555; cursor: not-allowed; border-color: #333; color: #888; box-shadow: none; }
+        /* Анимация пульсации */
+        #spin-btn.pulse { animation: pulse-blue 2s infinite; }
+        @keyframes pulse-blue {
+            0% { box-shadow: 0 0 0 0 rgba(0, 170, 255, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(0, 170, 255, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(0, 170, 255, 0); }
+        }
+        #spin-btn:hover:not(:disabled) { background: rgba(0, 170, 255, 0.2); }
+        /* Стили когда кнопка использована (disabled) */
+        #spin-btn:disabled { background: #222; cursor: not-allowed; border-color: #444; color: #555; animation: none; box-shadow: none; }
 
         .camera-controls { display: flex; gap: 10px; margin-left: 10px; }
         .camera-controls button {
@@ -37,7 +45,7 @@
             border-radius: 8px; cursor: pointer; font-size: 20px; font-weight: bold; font-family: 'Orbitron', sans-serif;
             transition: all 0.2s;
         }
-        .camera-controls button:hover { background: #00aaff; color: black; box-shadow: 0 0 15px #00aaff; }
+        .camera-controls button:hover { background: rgba(0, 170, 255, 0.2); box-shadow: 0 0 15px #00aaff; }
 
         #modules-container { display: flex; gap: 20px; flex-grow: 1; justify-content: center; }
         .tab-group { display: flex; flex-direction: column; background: #111; border: 1px solid #4a4a6a; border-radius: 8px; overflow: hidden; }
@@ -49,26 +57,39 @@
             transition: all 0.2s;
         }
         .module-btn:hover { background: #2a2a4a; border-color: #00aaff; }
-        .module-btn.selected { border-color: #00ff00; background: #1a3a1a; color: #00ff00; box-shadow: 0 0 10px rgba(0,255,0,0.3); }
+        /* Выбранный модуль теперь тоже в синих тонах */
+        .module-btn.selected { border-color: #00aaff; background: rgba(0, 170, 255, 0.2); color: #fff; box-shadow: 0 0 10px rgba(0,170,255,0.3); }
 
         #end-turn-btn { 
-            background: #aa0000; color: white; font-weight: bold; font-size: 16px; padding: 15px 30px; 
-            border: none; border-radius: 8px; cursor: pointer; margin-right: 20px; font-family: 'Orbitron', sans-serif;
-            transition: all 0.2s; box-shadow: 0 0 15px rgba(170, 0, 0, 0.5);
+            background: transparent; color: #00aaff; font-weight: bold; font-size: 16px; padding: 15px 30px; 
+            border: 2px solid #00aaff; border-radius: 8px; cursor: pointer; margin-right: 20px; font-family: 'Orbitron', sans-serif;
+            transition: all 0.2s;
         }
-        #end-turn-btn:hover { background: #ff0000; box-shadow: 0 0 25px rgba(255, 0, 0, 0.8); }
+        #end-turn-btn:hover { background: rgba(0, 170, 255, 0.2); box-shadow: 0 0 20px rgba(0, 170, 255, 0.5); }
 
         #ui-panel {
             position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%);
             background: rgba(10, 10, 25, 0.9); padding: 15px 30px; border-radius: 10px;
-            display: none; text-align: center; border: 2px solid #00aaff; box-shadow: 0 0 20px rgba(0, 170, 255, 0.3);
+            display: none; text-align: center; border: 2px solid #4a4a6a; box-shadow: 0 0 20px rgba(0, 170, 255, 0.1);
             z-index: 10; backdrop-filter: blur(5px);
         }
-        #ui-panel button { background: #2a2a4a; color: white; border: 1px solid #00aaff; padding: 8px 15px; font-size: 16px; cursor: pointer; margin: 0 5px; border-radius: 5px; font-family: 'Orbitron', sans-serif; }
+        #ui-panel button { 
+            background: #1a1a2e; color: white; border: 1px solid #00aaff; padding: 8px 15px; font-size: 16px; 
+            cursor: pointer; margin: 0 5px; border-radius: 5px; font-family: 'Orbitron', sans-serif; transition: all 0.2s;
+        }
+        #ui-panel button:hover { background: rgba(0, 170, 255, 0.2); }
+
+        /* Кнопки переключения баз W/S */
+        .base-cycle-controls { display: flex; justify-content: center; gap: 10px; margin-bottom: 10px; }
+        .base-cycle-controls button { background: transparent; color: #aaa; border: 1px solid #4a4a6a; }
+        .base-cycle-controls button:hover { border-color: #00aaff; color: #00aaff; }
+
         #power-bar-container { width: 200px; height: 15px; background: #111; border: 1px solid #00aaff; margin: 10px auto; border-radius: 10px; overflow: hidden; }
-        #power-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #ffaa00, #ff0000); box-shadow: 0 0 10px #ffaa00; }
-        #fire-btn { background: #aa00aa !important; font-weight: bold; width: 100%; margin-top: 10px; border-color: #ff00ff !important; box-shadow: 0 0 10px rgba(255,0,255,0.5); }
-        #fire-btn:hover { background: #ff00ff !important; color: black; }
+        #power-bar { width: 0%; height: 100%; background: #00aaff; box-shadow: 0 0 10px #00aaff; }
+        
+        /* Кнопка выстрела теперь тоже в синем стиле */
+        #fire-btn { background: rgba(0, 170, 255, 0.2) !important; font-weight: bold; width: 100%; margin-top: 10px; border-color: #00aaff !important; color: #fff; }
+        #fire-btn:hover { background: #00aaff !important; color: black; box-shadow: 0 0 20px #00aaff; }
 
         /* --- СТИЛИ СТАРТОВОГО ЭКРАНА --- */
         #start-screen {
@@ -137,7 +158,6 @@
             white-space: nowrap;
         }
 
-        /* Стилизация выпадающего списка (select) */
         .styled-select {
             background: #1a1a2e;
             color: #00aaff;
@@ -231,6 +251,11 @@
     </div>
 
     <div id="ui-panel">
+        <!-- Кнопки переключения баз -->
+        <div class="base-cycle-controls">
+            <button id="cycle-prev" title="Предыдущая база (W)">▲ W</button>
+            <button id="cycle-next" title="Следующая база (S)">▼ S</button>
+        </div>
         <div>
             <button id="turn-left">◀</button>
             <span style="font-size: 14px; margin: 0 10px; color: #aaa;">НАПРАВЛЕНИЕ</span>
@@ -242,7 +267,7 @@
 
     <div id="bottom-panel">
         <div id="energy-wheel-container">
-            <button id="spin-btn">⚡</button>
+            <button id="spin-btn" class="pulse">⚡</button>
             <div class="camera-controls">
                 <button id="rotate-left" title="Повернуть камеру влево (A)">A</button>
                 <button id="rotate-right" title="Повернуть камеру вправо (D)">D</button>
