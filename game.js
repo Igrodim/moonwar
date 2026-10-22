@@ -34,7 +34,7 @@ export function initGame(_scene, _camera, _controls) {
     setupEventListeners();
 }
 
-// СТРОГО 90 ГРАДУСОВ -> 70 ГРАДУСОВ ПРИ ПРИБЛИЖЕНИИ
+// СТРОГО 90 ГРАДУСОВ СВЕРХУ -> 70 ПРИ ПРИБЛИЖЕНИИ
 export function updateCameraTilt() {
     if (!selectedBase) return;
     
@@ -62,7 +62,7 @@ export function updateCameraTilt() {
         }
     }
     
-    // БЕЗОПАСНЫЙ UP (защита от Gimbal Lock при 90 градусах)
+    // БЕЗОПАСНЫЙ UP (защита от Gimbal Lock при взгляде ровно вниз)
     const lookDir = target.clone().sub(camera.position).normalize();
     let right = new THREE.Vector3().crossVectors(lookDir, normal).normalize();
     if (right.lengthSq() < 0.001) right = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
@@ -72,11 +72,14 @@ export function updateCameraTilt() {
 function centerCameraOnBase(base) {
     const normal = base.position.clone().normalize();
     const dist = 15;
-    const tangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
     
-    // Ставим камеру снаружи
     camera.position.copy(base.position).add(normal.clone().multiplyScalar(dist));
     controls.target.copy(base.position);
+    
+    let baseTangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
+    if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
+    camera.up.copy(baseTangent);
+    
     controls.update();
 }
 
@@ -142,9 +145,10 @@ export function updateFogOfWar() {
 }
 
 function setupEventListeners() {
+    // A/D ИСПРАВЛЕНЫ (Крутят чисто позицию, UP восстановится в updateCameraTilt)
     uiElements.rotateLeft.addEventListener('click', () => {
-        if (!selectedBase || isCharging) return;
-        const target = selectedBase.position;
+        if (isCharging) return;
+        const target = controls.target;
         const normal = target.clone().normalize();
         const offset = camera.position.clone().sub(target);
         offset.applyAxisAngle(normal, -Math.PI / 8);
@@ -153,8 +157,8 @@ function setupEventListeners() {
     });
 
     uiElements.rotateRight.addEventListener('click', () => {
-        if (!selectedBase || isCharging) return;
-        const target = selectedBase.position;
+        if (isCharging) return;
+        const target = controls.target;
         const normal = target.clone().normalize();
         const offset = camera.position.clone().sub(target);
         offset.applyAxisAngle(normal, Math.PI / 8);
@@ -235,6 +239,7 @@ function setupEventListeners() {
         }
     });
 
+    // ИСПРАВЛЕННЫЙ КОНЕЦ ХОДА (Автоматически выбирает базу Игрока 1)
     uiElements.endTurnBtn.addEventListener('click', () => {
         if (gameOver) return;
         currentPlayer++;
@@ -253,8 +258,19 @@ function setupEventListeners() {
             uiElements.bottomPanel.style.opacity = '0.5';
             playAITurn({ scene, camera, controls, bases, currentPlayer, playerEnergy, playerGenerators, onTurnEnd: endTurn, onGameOver: endGame, onGeneratorBuilt: () => {}, updateUI: () => updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors), updateFog: updateFogOfWar });
         } else {
+            // Ход игрока: восстанавливаем его базу и стрелку
             uiElements.bottomPanel.style.pointerEvents = 'auto';
             uiElements.bottomPanel.style.opacity = '1';
+            let hub = bases.find(b => b.owner === 1 && b.type === 'hub');
+            if (hub) {
+                selectedBase = hub;
+                centerCameraOnBase(selectedBase);
+                uiElements.uiPanel.style.display = 'block';
+                arrowHelper.position.copy(selectedBase.position);
+                currentAngle = selectedBase.aimAngle || 0;
+                updateArrowDirection();
+                arrowHelper.visible = true;
+            }
         }
     });
 
@@ -320,6 +336,17 @@ function endTurn() {
     } else {
         uiElements.bottomPanel.style.pointerEvents = 'auto';
         uiElements.bottomPanel.style.opacity = '1';
+        // Восстанавливаем стрелку для игрока 1
+        let hub = bases.find(b => b.owner === 1 && b.type === 'hub');
+        if (hub) {
+            selectedBase = hub;
+            centerCameraOnBase(selectedBase);
+            uiElements.uiPanel.style.display = 'block';
+            arrowHelper.position.copy(selectedBase.position);
+            currentAngle = selectedBase.aimAngle || 0;
+            updateArrowDirection();
+            arrowHelper.visible = true;
+        }
     }
 }
 
