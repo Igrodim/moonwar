@@ -19,11 +19,11 @@ let playerGenerators = {};
 let hasSpunThisTurn = false;
 let selectedModuleType = null;
 let gameOver = false;
+let fogMat;
 
 // Переменные для нашей ручной камеры
-let cameraDistance = 20;
+let cameraDistance = 15;
 let cameraAzimuth = 0;
-let fogMat;
 
 export function initGame(_scene, _camera) {
     scene = _scene;
@@ -33,57 +33,58 @@ export function initGame(_scene, _camera) {
     arrowHelper.visible = false;
     scene.add(arrowHelper);
 
-    // Зум колесиком
     window.addEventListener('wheel', (e) => {
         if (gameOver) return;
         cameraDistance += e.deltaY * 0.01;
-        cameraDistance = Math.max(2, Math.min(30, cameraDistance));
+        cameraDistance = Math.max(2, Math.min(20, cameraDistance));
     });
 
     setupFogOfWar();
     setupEventListeners();
 }
 
-// ЧИСТАЯ И БЕЗОПАСНАЯ КАМЕРА (90 -> 70 ГРАДУСОВ)
+// ИДЕАЛЬНАЯ КАМЕРА БЕЗ GIMBAL LOCK (90 ГРАДУСОВ ВДАЛИ, 70 ВБЛИЗИ)
 export function updateCamera() {
     if (!selectedBase) {
-        // Если база не выбрана (экран ИИ), смотрим на планету сверху
         camera.position.set(0, 20, 20);
+        camera.up.set(0, 1, 0);
         camera.lookAt(0, 0, 0);
         return;
     }
 
     const target = selectedBase.position;
-    const normal = target.clone().normalize(); // Вектор от центра планеты к базе
+    const normal = target.clone().normalize();
     
-    // Строим тангенс (перпендикуляр к нормали)
     let up = new THREE.Vector3(0, 1, 0);
     let tangent = new THREE.Vector3().crossVectors(normal, up).normalize();
-    if (tangent.lengthSq() < 0.1) tangent.set(1, 0, 0); // Если база на полюсе
-
-    // Вращаем тангенс на угол камеры (для кнопок A/D)
+    if (tangent.lengthSq() < 0.1) tangent.set(1, 0, 0).cross(normal).normalize();
+    
     tangent.applyAxisAngle(normal, cameraAzimuth);
     const bitangent = new THREE.Vector3().crossVectors(normal, tangent).normalize();
 
-    // Вычисляем угол наклона (от 0 до 20 градусов от нормали)
-    let t = (cameraDistance - 2) / (20 - 2);
+    // Угол от нормали: 0 (90 к поверхности) когда далеко, 20 (70 к поверхности) когда близко
+    let t = (cameraDistance - 2) / 18;
     t = Math.max(0, Math.min(1, t));
-    const phi = THREE.MathUtils.degToRad(20 * (1 - t)); // 20 градусов вблизи, 0 (90 к поверхности) вдали
+    const phi = THREE.MathUtils.degToRad(20 * (1 - t));
 
-    // Итоговая позиция камеры
     const offset = normal.clone().multiplyScalar(Math.cos(phi) * cameraDistance)
                  .add(bitangent.clone().multiplyScalar(Math.sin(phi) * cameraDistance));
 
     camera.position.copy(target).add(offset);
-    
-    // БЕЗОПАСНЫЙ UP: Всегда используем тангенс. Это исключает Gimbal Lock на 90 градусах!
-    camera.up.copy(tangent);
+    camera.up.copy(tangent); // Вектор верха всегда перпендикулярен взгляду, никаких кувырков
     camera.lookAt(target);
 }
 
-function centerCameraOnBase(base) {
+function selectBase(base) {
+    selectedBase = base;
     cameraDistance = 15;
-    // Ничего больше не делаем, updateCamera всё сделает сам
+    cameraAzimuth = 0;
+    uiElements.uiPanel.style.display = 'block';
+    arrowHelper.position.copy(base.position);
+    currentAngle = base.aimAngle || 0;
+    updateArrowDirection();
+    arrowHelper.visible = true;
+    updateCamera(); // Мгновенно ставим камеру на место
 }
 
 function setupFogOfWar() {
@@ -146,12 +147,12 @@ export function updateFogOfWar() {
 function setupEventListeners() {
     // A/D ИСПРАВЛЕНЫ (просто меняем угол)
     uiElements.rotateLeft.addEventListener('click', () => {
-        if (isCharging) return;
+        if (gameOver) return;
         cameraAzimuth -= Math.PI / 8;
     });
 
     uiElements.rotateRight.addEventListener('click', () => {
-        if (isCharging) return;
+        if (gameOver) return;
         cameraAzimuth += Math.PI / 8;
     });
 
@@ -247,17 +248,9 @@ function setupEventListeners() {
             uiElements.bottomPanel.style.pointerEvents = 'auto';
             uiElements.bottomPanel.style.opacity = '1';
             
-            // АВТОВЫБОР БАЗЫ ИГРОКА
+            // АВТОВЫБОР БАЗЫ ИГРОКА (Стрелка возвращается)
             let hub = bases.find(b => b.owner === 1 && b.type === 'hub');
-            if (hub) {
-                selectedBase = hub;
-                centerCameraOnBase(selectedBase);
-                uiElements.uiPanel.style.display = 'block';
-                arrowHelper.position.copy(selectedBase.position);
-                currentAngle = selectedBase.aimAngle || 0;
-                updateArrowDirection();
-                arrowHelper.visible = true;
-            }
+            if (hub) selectBase(hub);
         }
     });
 
@@ -286,17 +279,17 @@ function startGame() {
         layFlatOnSphere(hub, pos);
         scene.add(hub);
         
-        let baseObj = { mesh: hub, position: pos, owner: p, hp: 100, maxHp: 100, type: 'hub', parent: null, angle: 0, aimAngle: 0 };
+        // НЕВИДИМЫЙ ХИТБОКС ДЛЯ ГЛАВНОЙ БАЗЫ
+        const hitArea = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), new THREE.MeshBasicMaterial({ visible: false }));
+        hitArea.position.copy(pos);
+        scene.add(hitArea);
+        
+        let baseObj = { mesh: hub, hitArea: hitArea, position: pos, owner: p, hp: 100, maxHp: 100, type: 'hub', parent: null, angle: 0, aimAngle: 0 };
         bases.push(baseObj);
         createHealthBar(scene, baseObj);
         
         if (p === 1) {
-            selectedBase = baseObj;
-            centerCameraOnBase(selectedBase);
-            uiElements.uiPanel.style.display = 'block';
-            arrowHelper.position.copy(pos);
-            updateArrowDirection();
-            arrowHelper.visible = true;
+            selectBase(baseObj);
         }
     }
     setupRaycaster();
@@ -323,17 +316,10 @@ function endTurn() {
     } else {
         uiElements.bottomPanel.style.pointerEvents = 'auto';
         uiElements.bottomPanel.style.opacity = '1';
-        // АВТОВЫБОР БАЗЫ ИГРОКА
+        
+        // АВТОВЫБОР БАЗЫ ИГРОКА (Стрелка возвращается)
         let hub = bases.find(b => b.owner === 1 && b.type === 'hub');
-        if (hub) {
-            selectedBase = hub;
-            centerCameraOnBase(selectedBase);
-            uiElements.uiPanel.style.display = 'block';
-            arrowHelper.position.copy(selectedBase.position);
-            currentAngle = selectedBase.aimAngle || 0;
-            updateArrowDirection();
-            arrowHelper.visible = true;
-        }
+        if (hub) selectBase(hub);
     }
 }
 
@@ -359,12 +345,13 @@ function setupRaycaster() {
         scene.updateMatrixWorld();
         raycaster.setFromCamera(mouse, camera);
         
-        const baseMeshes = bases.map(b => b.mesh);
-        const intersects = raycaster.intersectObjects(baseMeshes);
+        // ИСПОЛЬЗУЕМ ХИТБОКСЫ (НЕВИДИМЫЕ ЗОНЫ)
+        const hitboxes = bases.map(b => b.hitArea).filter(h => h !== undefined);
+        const intersects = raycaster.intersectObjects(hitboxes);
 
         if (intersects.length > 0) {
             const clickedMesh = intersects[0].object;
-            const clickedBase = bases.find(b => b.mesh === clickedMesh);
+            const clickedBase = bases.find(b => b.hitArea === clickedMesh);
             
             if (selectedModuleType === 'heal') {
                 if (clickedBase.owner === currentPlayer && playerEnergy[currentPlayer] >= 1) {
@@ -378,14 +365,7 @@ function setupRaycaster() {
             if (clickedBase.owner !== currentPlayer) return; 
             if (clickedBase.type !== 'hub' && clickedBase.type !== 'relay') return; 
 
-            selectedBase = clickedBase;
-            centerCameraOnBase(selectedBase);
-            
-            uiElements.uiPanel.style.display = 'block';
-            arrowHelper.position.copy(selectedBase.position);
-            currentAngle = selectedBase.aimAngle || 0;
-            updateArrowDirection();
-            arrowHelper.visible = true;
+            selectBase(clickedBase);
         }
     });
 }
