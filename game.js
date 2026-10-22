@@ -4,6 +4,9 @@ import { playAITurn } from './ai.js';
 import { uiElements, updateUI, clearSelection } from './ui.js';
 import { createPlanet } from './planet.js';
 
+// Экспортируем переменную для main.js
+export let isGameRunning = false;
+
 let scene, camera, controls;
 let bases = [];
 let selectedBase = null;
@@ -135,20 +138,25 @@ function setupFogOfWar() {
     fogCanvas.height = 512;
     fogCtx = fogCanvas.getContext('2d');
     
+    // Жестко заливаем черным при создании
+    fogCtx.fillStyle = '#000000';
+    fogCtx.fillRect(0, 0, 1024, 512);
+
     fogTexture = new THREE.CanvasTexture(fogCanvas);
-    // Оптимизация текстур: убираем артефакты сглаживания
+    // ОПТИМИЗАЦИЯ И ФИКС АРТЕФАКТОВ:
+    fogTexture.generateMipmaps = false; 
     fogTexture.minFilter = THREE.LinearFilter;
     fogTexture.magFilter = THREE.LinearFilter;
-    fogTexture.wrapS = THREE.RepeatWrapping;
+    fogTexture.wrapS = THREE.ClampToEdgeWrapping;
     fogTexture.wrapT = THREE.ClampToEdgeWrapping;
     
-    // ОПТИМИЗАЦИЯ: Увеличили радиус сферы тумана до 10.05, чтобы убрать белый ореол
-    const fogGeo = new THREE.SphereGeometry(10.05, 32, 32); 
+    // Увеличили полигонаж сферы тумана, чтобы убрать "кубики" на краях
+    const fogGeo = new THREE.SphereGeometry(10.05, 64, 64); 
     const fogMat = new THREE.MeshBasicMaterial({ 
         map: fogTexture, 
         transparent: true, 
         depthWrite: false,
-        color: 0x000000 // Принудительно черный цвет тумана
+        color: 0xffffff // Базовый цвет белый, чтобы текстура (черная) отображалась как есть
     });
     
     fogMesh = new THREE.Mesh(fogGeo, fogMat);
@@ -470,6 +478,8 @@ function endGame(owner) {
 }
 
 function startGame() {
+    isGameRunning = true; // Включаем рендер
+
     const sizeFactor = parseFloat(document.getElementById('planet-size').value);
     const newRadius = 10 * sizeFactor;
     setPlanetRadius(newRadius);
