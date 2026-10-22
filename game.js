@@ -21,8 +21,6 @@ let hasSpunThisTurn = false;
 let selectedModuleType = null; 
 let gameOver = false;
 let isAITurn = false;
-
-// БЛОКИРОВКА ВО ВРЕМЯ ПОЛЕТА
 let isShooting = false; 
 
 let currentCameraAzimuth = 0; 
@@ -75,10 +73,13 @@ function centerCameraOnBase(base) {
         currentDist = 20; 
     }
 
-    camera.up.copy(normal); 
     let baseTangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
     if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
     let tangent = baseTangent.applyAxisAngle(normal, currentCameraAzimuth);
+    
+    // ИСПРАВЛЕНО: Безопасный вектор верха, чтобы не ломался Raycaster
+    let upVec = new THREE.Vector3().crossVectors(normal, tangent).normalize();
+    camera.up.copy(upVec); 
     
     const minDist = 1.5;
     const maxDist = 20;
@@ -280,7 +281,9 @@ function rotateCameraAroundTarget(angle) {
     const offset = camera.position.clone().sub(target);
     offset.applyAxisAngle(normal, angle);
     camera.position.copy(target).add(offset);
-    camera.up.applyAxisAngle(normal, angle);
+    
+    camera.up.applyAxisAngle(normal, angle); // Теперь безопасно, т.к. up перпендикулярен
+    
     controls.update();
 }
 
@@ -412,13 +415,18 @@ function setupRaycaster() {
     const mouse = new THREE.Vector2();
 
     window.addEventListener('pointerdown', (event) => {
-        if (isAITurn || gameOver || isShooting) return;
+        if (event.button !== 0) return; // Только ЛКМ
+        
+        if (isAITurn || gameOver) return;
         if (event.target.closest('#bottom-panel') || event.target.closest('#ui-panel') || event.target.closest('#start-screen')) return;
 
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         mouse.y = (event.clientY / window.innerHeight) * 2 + 1;
 
+        camera.updateMatrixWorld();
+        scene.updateMatrixWorld();
         raycaster.setFromCamera(mouse, camera);
+        
         const baseMeshes = bases.filter(b => b.mesh.visible).map(b => b.mesh);
         const intersects = raycaster.intersectObjects(baseMeshes);
 
