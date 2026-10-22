@@ -1,4 +1,4 @@
-import { PLANET_RADIUS, playerColors, getGeometry, layFlatOnSphere, VISION_RADIUS } from './entities.js';
+import { PLANET_RADIUS, playerColors, getGeometry, layFlatOnSphere, VISION_RADIUS, createHealthBar } from './entities.js';
 import { executeShot, canShoot } from './combat.js';
 import { playAITurn } from './ai.js';
 import { uiElements, updateUI, clearSelection } from './ui.js';
@@ -22,6 +22,9 @@ let selectedModuleType = null;
 let gameOver = false;
 let isAITurn = false;
 
+// Переменная для хранения текущего поворота камеры
+let currentCameraAzimuth = 0; 
+
 let fogMat;
 
 export function initGame(_scene, _camera, _controls) {
@@ -37,7 +40,6 @@ export function initGame(_scene, _camera, _controls) {
     setupEventListeners();
 }
 
-// ПЛАВНОЕ ИЗМЕНЕНИЕ УГЛА (Математика)
 export function updateCameraTilt() {
     if (!selectedBase || isAITurn) return;
     
@@ -45,43 +47,49 @@ export function updateCameraTilt() {
     const normal = target.clone().normalize();
     const dist = camera.position.distanceTo(target);
     
-    const minDist = 1.5;  // Ближняя дистанция (наклон 25 градусов от нормали = 65 к поверхности)
-    const maxDist = 20;   // Дальняя дистанция (почти 90 к поверхности)
+    const minDist = 1.5;  
+    const maxDist = 20;   
     
     let t = (dist - minDist) / (maxDist - minDist);
     t = Math.max(0, Math.min(1, t));
     
-    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t)); // От 2 до 25 градусов от нормали
+    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t)); 
     
     const offset = camera.position.clone().sub(target);
     const currentPhi = offset.angleTo(normal);
     
-    // Если угол не совпадает, плавно поворачиваем камеру
     if (Math.abs(currentPhi - targetPhi) > 0.005) {
-        // Ось вращения - перпендикуляр между текущим положением и нормалью
         const axis = new THREE.Vector3().crossVectors(offset, normal).normalize();
         if (axis.lengthSq() > 0.001) {
-            // Плавно интерполируем позицию
             offset.applyAxisAngle(axis, (currentPhi - targetPhi) * 0.1);
             camera.position.copy(target).add(offset);
         }
     }
 }
 
-// ИНИЦИАЛИЗАЦИЯ КАМЕРЫ ПРИ ВЫБОРЕ БАЗЫ
 function centerCameraOnBase(base) {
     const normal = base.position.clone().normalize();
-    camera.up.copy(normal); // Верх камеры смотрит от центра планеты
     
-    // Задаем начальный наклон 2 градуса (вид почти сверху)
-    let tangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
-    if (tangent.lengthSq() < 0.1) tangent.set(0, 0, 1).cross(normal).normalize();
+    let currentDist = camera.position.distanceTo(controls.target);
+    if (currentDist < 1.5 || currentDist > 25 || isNaN(currentDist)) {
+        currentDist = 20; 
+    }
+
+    camera.up.copy(normal); 
     
-    const initialPhi = THREE.MathUtils.degToRad(2);
-    const dist = 20;
+    // Используем сохраненный угол поворота камеры
+    let baseTangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
+    if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
+    let tangent = baseTangent.applyAxisAngle(normal, currentCameraAzimuth);
     
-    const offset = normal.clone().multiplyScalar(Math.cos(initialPhi) * dist)
-                         .add(tangent.clone().multiplyScalar(Math.sin(initialPhi) * dist));
+    const minDist = 1.5;
+    const maxDist = 20;
+    let t = (currentDist - minDist) / (maxDist - minDist);
+    t = Math.max(0, Math.min(1, t));
+    const targetPhi = THREE.MathUtils.degToRad(2 + 23 * (1 - t));
+
+    const offset = normal.clone().multiplyScalar(Math.cos(targetPhi) * currentDist)
+                         .add(tangent.clone().multiplyScalar(Math.sin(targetPhi) * currentDist));
                          
     camera.position.copy(base.position).add(offset);
     controls.target.copy(base.position);
@@ -151,6 +159,7 @@ export function updateFogOfWar() {
             base.mesh.visible = true;
             if (base.lineMesh) base.lineMesh.visible = true;
             if (base.domeMesh) base.domeMesh.visible = true;
+            if (base.healthSprite) base.healthSprite.visible = true;
             return;
         }
 
@@ -168,6 +177,7 @@ export function updateFogOfWar() {
             base.lineMesh.visible = inVision && (base.parent ? base.parent.mesh.visible : false);
         }
         if (base.domeMesh) base.domeMesh.visible = inVision;
+        if (base.healthSprite) base.healthSprite.visible = inVision;
     });
 }
 
@@ -176,19 +186,19 @@ function setupEventListeners() {
         if (isAITurn || gameOver || !selectedBase) return;
         const key = e.key.toLowerCase();
         if (key === 'a' || key === 'ф') {
-            rotateCameraAroundTarget(-Math.PI / 18); 
+            rotateCameraAroundTarget(-Math.PI / 16); // Шаг 11.25 градусов
         } else if (key === 'd' || key === 'в') {
-            rotateCameraAroundTarget(Math.PI / 18);
+            rotateCameraAroundTarget(Math.PI / 16);
         }
     });
 
     uiElements.rotateLeft.addEventListener('click', () => {
         if (isAITurn || gameOver || !selectedBase) return;
-        rotateCameraAroundTarget(-Math.PI / 18);
+        rotateCameraAroundTarget(-Math.PI / 16);
     });
     uiElements.rotateRight.addEventListener('click', () => {
         if (isAITurn || gameOver || !selectedBase) return;
-        rotateCameraAroundTarget(Math.PI / 18);
+        rotateCameraAroundTarget(Math.PI / 16);
     });
 
     uiElements.spinBtn.addEventListener('click', () => {
@@ -215,8 +225,9 @@ function setupEventListeners() {
         endTurn();
     });
 
-    uiElements.btnLeft.addEventListener('click', () => { if (selectedBase && !isAITurn) { currentAngle += 22.5; updateArrowDirection(); } });
-    uiElements.btnRight.addEventListener('click', () => { if (selectedBase && !isAITurn) { currentAngle -= 22.5; updateArrowDirection(); } });
+    // Шаг стрелки теперь 11.25
+    uiElements.btnLeft.addEventListener('click', () => { if (selectedBase && !isAITurn) { currentAngle += 11.25; updateArrowDirection(); } });
+    uiElements.btnRight.addEventListener('click', () => { if (selectedBase && !isAITurn) { currentAngle -= 11.25; updateArrowDirection(); } });
 
     uiElements.fireBtn.addEventListener('pointerdown', (e) => {
         e.preventDefault();
@@ -256,6 +267,9 @@ function setupEventListeners() {
                 playerEnergy[currentPlayer] -= cost;
                 updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
                 
+                // Сохраняем угол прицела перед выстрелом
+                selectedBase.aimAngle = currentAngle;
+
                 executeShot(scene, bases, selectedBase, check.snappedAngle, power, selectedModuleType, check.sector, playerGenerators, 
                     (genCount) => alert(`Генератор! Твоя выработка: от ${5 + genCount} до ${8 + genCount}`),
                     (owner) => endGame(owner),
@@ -283,19 +297,18 @@ function setupEventListeners() {
     });
 }
 
-// ЧИСТАЯ МАТЕМАТИКА ДЛЯ ВРАЩЕНИЯ
 function rotateCameraAroundTarget(angle) {
     if (!selectedBase) return;
+    
+    currentCameraAzimuth += angle; // СОХРАНЯЕМ УГОЛ КАМЕРЫ
     
     const target = selectedBase.position;
     const normal = target.clone().normalize();
 
-    // Вращаем позицию камеры вокруг нормали базы
     const offset = camera.position.clone().sub(target);
     offset.applyAxisAngle(normal, angle);
     camera.position.copy(target).add(offset);
 
-    // Вращаем "верх" камеры, чтобы горизонт оставался ровным
     camera.up.applyAxisAngle(normal, angle);
     
     controls.update();
@@ -401,15 +414,16 @@ function startGame() {
         layFlatOnSphere(hub, pos);
         scene.add(hub);
         
-        let baseObj = { mesh: hub, position: pos, owner: p, hp: 100, maxHp: 100, type: 'hub', parent: null, sector: -1, lineMesh: null, visionRadius: VISION_RADIUS };
+        let baseObj = { mesh: hub, position: pos, owner: p, hp: 100, maxHp: 100, type: 'hub', parent: null, sector: -1, lineMesh: null, visionRadius: VISION_RADIUS, aimAngle: 0 };
         bases.push(baseObj);
+        createHealthBar(scene, baseObj);
         
         if (p === 1) {
             selectedBase = baseObj;
             centerCameraOnBase(selectedBase); 
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(pos);
-            currentAngle = 0;
+            currentAngle = selectedBase.aimAngle; // Загружаем сохраненный угол
             updateArrowDirection();
             arrowHelper.visible = true;
         }
@@ -458,7 +472,7 @@ function setupRaycaster() {
             
             uiElements.uiPanel.style.display = 'block';
             arrowHelper.position.copy(selectedBase.position);
-            currentAngle = 0;
+            currentAngle = selectedBase.aimAngle; // ВОССТАНАВЛИВАЕМ УГОЛ ПРИЦЕЛА
             updateArrowDirection();
             arrowHelper.visible = true;
         } else {
