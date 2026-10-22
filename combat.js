@@ -27,7 +27,7 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
 
     let color = 0xffaa00;
     if (moduleToBuild === 'bomb') color = 0xff0000;
-    if (moduleToBuild === 'homing') color = 0xff00ff; 
+    if (moduleToBuild === 'homing') color = 0xff00ff;
 
     const projectile = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), new THREE.MeshBasicMaterial({ color: color }));
     projectile.position.copy(startBase.position);
@@ -50,7 +50,7 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
         } else {
             scene.remove(projectile);
             try {
-                handleLanding(scene, bases, targetPos, startBase, moduleToBuild, angle, playerGenerators, onGeneratorBuilt, onGameOver); 
+                handleLanding(scene, bases, targetPos, startBase, moduleToBuild, angle, playerGenerators, onGeneratorBuilt, onGameOver);
             } finally {
                 if (onComplete) onComplete();
             }
@@ -85,7 +85,7 @@ export function explode(scene, bases, pos, damage, onGameOver) {
 
     const basesCopy = [...bases];
     for (let b of basesCopy) {
-        if (b.position.distanceTo(explosionCenter) < 0.5) { 
+        if (b.position.distanceTo(explosionCenter) < 0.5) {
             b.hp -= damage;
             updateHealthBar(b);
             if (b.hp <= 0) destroyBaseAndChain(scene, bases, b, onGameOver);
