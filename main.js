@@ -1,10 +1,8 @@
 import { createPlanet } from './planet.js';
-import { initGame, updateCameraTilt } from './game.js';
+import { initGame, updateCamera } from './game.js';
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-camera.position.set(0, 20, 20);
-camera.up.set(0, 1, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -12,21 +10,13 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x000000, 1);
 document.body.appendChild(renderer.domElement);
 
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+scene.add(new THREE.AmbientLight(0xffffff, 0.7));
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-dirLight.position.set(5, 3, 5);
+dirLight.position.set(10, 10, 10);
 scene.add(dirLight);
 
-const controls = new THREE.OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.05;
-controls.enablePan = false;
-controls.enableRotate = false; // Вращение только кнопками A/D
-controls.minDistance = 2;
-controls.maxDistance = 40;
-
 createPlanet(scene);
-initGame(scene, camera, controls);
+initGame(scene, camera);
 
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -36,8 +26,7 @@ window.addEventListener('resize', () => {
 
 function animate() {
     requestAnimationFrame(animate);
-    updateCameraTilt(); // Безопасный наклон камеры
-    controls.update();
+    updateCamera(); // Вызываем нашу безопасную камеру
     renderer.render(scene, camera);
 }
 animate();
