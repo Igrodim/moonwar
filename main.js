@@ -1,17 +1,15 @@
-import { initGame, updateCameraTilt, updateCameraAnimation } from './game.js';
+import { initGame, updateCameraTilt, updateCameraAnimation, isGameRunning } from './game.js';
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 1000);
 camera.position.z = 30;
 
-// МАКСИМАЛЬНАЯ ОПТИМИЗАЦИЯ: убираем сглаживание и ставим pixelRatio = 1
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
 renderer.setPixelRatio(1); 
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x000000, 1);
 document.body.appendChild(renderer.domElement);
 
-// Уменьшили интенсивность света, чтобы не было пересветов
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); 
 scene.add(ambientLight);
 
@@ -19,13 +17,12 @@ const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
 dirLight.position.set(5, 3, 5);
 scene.add(dirLight);
 
-// Звезды
 const starsGeometry = new THREE.BufferGeometry();
 const starsCount = 2000; 
 const posArray = new Float32Array(starsCount * 3);
 for (let i = 0; i < starsCount * 3; i++) { posArray[i] = (Math.random() - 0.5) * 200; }
 starsGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-const starsMaterial = new THREE.PointsMaterial({ size: 0.2, color: 0xffffff, transparent: true, opacity: 0.8 });
+const starsMaterial = new THREE.PointsMaterial({ size: 0.15, color: 0xffffff, transparent: true, opacity: 0.8 });
 const starMesh = new THREE.Points(starsGeometry, starsMaterial);
 scene.add(starMesh);
 
@@ -46,13 +43,15 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// Ограничитель кадров (60 FPS)
 let lastFrameTime = 0;
 const fpsLimit = 60;
 const interval = 1000 / fpsLimit;
 
 function animate(time) {
     requestAnimationFrame(animate);
+
+    // Если мы в меню (игра не началась), полностью останавливаем рендер
+    if (!isGameRunning) return;
 
     const delta = time - lastFrameTime;
     if (delta < interval) return;
