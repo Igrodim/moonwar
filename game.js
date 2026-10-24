@@ -23,7 +23,7 @@ let hasSpunThisTurn = false;
 let selectedModuleType = null; 
 let gameOver = false;
 let isAITurn = false;
-let aiSpeedMultiplier = 1; // Глобальная скорость ИИ
+let aiSpeedMultiplier = 1; 
 
 let currentCameraAzimuth = 0; 
 let fogMat, fogMesh;
@@ -318,13 +318,14 @@ function setupEventListeners() {
                 
                 selectedBase.aimAngle = currentAngle;
 
+                // ФИКС: Игрок всегда стреляет со скоростью 1 (обычной)
                 executeShot(scene, bases, selectedBase, check.snappedAngle, power, selectedModuleType, check.sector, playerGenerators, 
                     (genCount) => window.showMessage("УСПЕХ", `Генератор построен! Твоя выработка: от ${5 + genCount} до ${8 + genCount}`),
                     (owner) => endGame(owner),
                     () => updateFogOfWar(),
                     1, 
                     VISION_RADIUS,
-                    aiSpeedMultiplier
+                    1 // <--- ВСЕГДА 1
                 );
             } else if (power > 0) {
                 window.showMessage("ВНИМАНИЕ", "Не хватает энергии!");
@@ -434,7 +435,6 @@ function endTurn() {
 
     updateFogOfWar(); 
 
-    // СКРЫВАЕМ/ПОКАЗЫВАЕМ ИНТЕРФЕЙС В ЗАВИСИМОСТИ ОТ ХОДА
     if (currentPlayer > 1) {
         uiElements.topInfo.style.display = 'none';
         uiElements.waitingScreen.style.display = 'flex';
@@ -448,7 +448,7 @@ function endTurn() {
             onTurnEnd: endTurn,
             onGameOver: endGame,
             onGeneratorBuilt: (genCount) => {},
-            updateUI: () => {}, // Боты больше не обновляют энергию на экране
+            updateUI: () => {}, 
             updateFog: updateFogOfWar,
             speedMultiplier: aiSpeedMultiplier
         });
