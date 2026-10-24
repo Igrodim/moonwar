@@ -2,20 +2,20 @@ import { canShoot, executeShot, checkLineIntersection } from './combat.js';
 import { PLANET_RADIUS, VISION_RADIUS } from './entities.js';
 
 export function playAITurn(gameContext) {
-    const { scene, camera, controls, bases, currentPlayer, playerEnergy, playerGenerators, onTurnEnd, onGameOver, onGeneratorBuilt, updateFog } = gameContext;
+    const { scene, camera, controls, bases, currentPlayer, playerEnergy, playerGenerators, onTurnEnd, onGameOver, onGeneratorBuilt, updateFog, speedMultiplier } = gameContext;
 
     const minRoll = 5 + playerGenerators[currentPlayer];
     const maxRoll = 8 + playerGenerators[currentPlayer];
     const rolledEnergy = Math.floor(Math.random() * (maxRoll - minRoll + 1)) + minRoll;
     playerEnergy[currentPlayer] += rolledEnergy;
     
-    if (gameContext.updateUI) gameContext.updateUI();
+    // Больше не обновляем UI
 
     const performAIAction = () => {
-        if (playerEnergy[currentPlayer] < 1) { setTimeout(onTurnEnd, 1000); return; }
+        if (playerEnergy[currentPlayer] < 1) { setTimeout(onTurnEnd, 1000 / speedMultiplier); return; }
 
         let myBases = bases.filter(b => b.owner === currentPlayer && (b.type === 'hub' || b.type === 'relay'));
-        if (myBases.length === 0) { setTimeout(onTurnEnd, 1000); return; }
+        if (myBases.length === 0) { setTimeout(onTurnEnd, 1000 / speedMultiplier); return; }
 
         let startBase = myBases[Math.floor(Math.random() * myBases.length)];
 
@@ -103,18 +103,17 @@ export function playAITurn(gameContext) {
 
         if (allowed && playerEnergy[currentPlayer] >= cost) {
             playerEnergy[currentPlayer] -= cost;
-            if (gameContext.updateUI) gameContext.updateUI();
 
             let power = ['relay', 'generator'].includes(module) ? 10 : 8;
 
             executeShot(scene, bases, startBase, bestAngle, power, module, check.sector, playerGenerators, onGeneratorBuilt, onGameOver, () => {
                 if (updateFog) updateFog(); 
-                setTimeout(performAIAction, 1000); 
-            }, currentPlayer, VISION_RADIUS);
+                setTimeout(performAIAction, 1000 / speedMultiplier); 
+            }, currentPlayer, VISION_RADIUS, speedMultiplier);
             
         } else {
-            setTimeout(onTurnEnd, 1000);
+            setTimeout(onTurnEnd, 1000 / speedMultiplier);
         }
     };
-    setTimeout(() => { performAIAction(); }, 1500);
+    setTimeout(() => { performAIAction(); }, 1500 / speedMultiplier);
 }
