@@ -81,17 +81,32 @@
         #fire-btn { background: rgba(0, 170, 255, 0.2) !important; font-weight: bold; width: 100%; margin-top: 10px; border-color: #00aaff !important; color: #fff; }
         #fire-btn:hover { background: #00aaff !important; color: black; box-shadow: 0 0 20px #00aaff; }
 
+        /* --- ЭКРАН ОЖИДАНИЯ ХОДА ИИ --- */
+        #waiting-screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(3px);
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 500; pointer-events: none;
+        }
+        .waiting-text {
+            font-size: 36px; font-weight: 900; color: #00aaff; letter-spacing: 5px;
+            text-shadow: 0 0 20px #00aaff; animation: pulse-text 1.5s infinite;
+        }
+        @keyframes pulse-text {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; text-shadow: 0 0 30px #00aaff; }
+            100% { opacity: 0.5; }
+        }
+
         /* --- СТИЛИ СТАРТОВОГО ЭКРАНА --- */
         #start-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            /* Статичный фон, вместо тяжелой анимации */
             background-color: #050510;
             background-image: radial-gradient(circle at center, #1a1a2e 0%, #050510 100%);
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             z-index: 1000; overflow: hidden;
         }
 
-        /* СТАТИЧНЫЕ ЗВЕЗДЫ: больше никакой анимации, чтобы не грузить GPU */
         #start-screen::before {
             content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background-image: url('data:image/svg+xml;utf8,<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg"><circle cx="20" cy="30" r="1" fill="%23ffffff" opacity="0.4"/><circle cx="40" cy="70" r="1" fill="%23ffffff" opacity="0.4"/><circle cx="50" cy="160" r="1" fill="%23ffffff" opacity="0.4"/><circle cx="90" cy="40" r="1.5" fill="%23ffffff" opacity="0.5"/><circle cx="130" cy="80" r="1" fill="%23ffffff" opacity="0.4"/><circle cx="150" cy="180" r="1.5" fill="%23ffffff" opacity="0.5"/><circle cx="10" cy="100" r="1" fill="%23ffffff" opacity="0.4"/><circle cx="180" cy="20" r="1" fill="%23ffffff" opacity="0.4"/></svg>');
@@ -125,7 +140,7 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 25px;
+            gap: 20px;
             margin-bottom: 40px;
         }
 
@@ -136,7 +151,7 @@
 
         .ai-label {
             color: #88aaff;
-            font-size: 16px;
+            font-size: 14px;
             letter-spacing: 2px;
             text-transform: uppercase;
             text-shadow: 0 0 5px rgba(0, 170, 255, 0.5);
@@ -147,10 +162,10 @@
             background: #1a1a2e;
             color: #00aaff;
             border: 2px solid #00aaff;
-            padding: 10px 40px 10px 15px;
+            padding: 8px 35px 8px 15px;
             border-radius: 8px;
             font-family: 'Orbitron', sans-serif;
-            font-size: 16px;
+            font-size: 14px;
             outline: none;
             cursor: pointer;
             appearance: none;
@@ -168,14 +183,14 @@
         .ai-selector { display: flex; align-items: center; gap: 15px; }
         .ai-btn {
             background: transparent; color: #00aaff; border: 2px solid #00aaff; 
-            width: 40px; height: 40px; border-radius: 50%; font-size: 24px; font-weight: bold; cursor: pointer;
+            width: 35px; height: 35px; border-radius: 50%; font-size: 20px; font-weight: bold; cursor: pointer;
             display: flex; justify-content: center; align-items: center; transition: all 0.2s; font-family: 'Orbitron', sans-serif;
         }
         .ai-btn:hover { background: rgba(0, 170, 255, 0.2); box-shadow: 0 0 15px #00aaff; }
 
         #ai-count {
-            font-size: 32px; font-weight: bold; color: white; text-align: center;
-            background: transparent; border: none; width: 60px; font-family: 'Orbitron', sans-serif;
+            font-size: 28px; font-weight: bold; color: white; text-align: center;
+            background: transparent; border: none; width: 50px; font-family: 'Orbitron', sans-serif;
             border-bottom: 2px solid #4a4a6a; padding-bottom: 5px;
         }
         #ai-count:focus { outline: none; border-bottom-color: #00aaff; }
@@ -256,10 +271,25 @@
                         <button class="ai-btn" onclick="changeAI(1)">+</button>
                     </div>
                 </div>
+
+                <div class="settings-row">
+                    <div class="ai-label">Скорость ИИ:</div>
+                    <select id="ai-speed" class="styled-select">
+                        <option value="1">Обычная</option>
+                        <option value="2">Быстрая x2</option>
+                        <option value="5">Очень быстрая x5</option>
+                        <option value="100">Мгновенная</option>
+                    </select>
+                </div>
             </div>
             
             <button id="start-btn">НАЧАТЬ ИГРУ</button>
         </div>
+    </div>
+
+    <!-- Экран ожидания -->
+    <div id="waiting-screen">
+        <div class="waiting-text">ОЖИДАНИЕ ХОДА...</div>
     </div>
 
     <div id="top-info">
