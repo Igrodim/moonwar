@@ -14,7 +14,7 @@ export function canShoot(bases, startBase, angle, moduleToBuild) {
     return { allowed: true, snappedAngle: snappedAngle, sector: sector };
 }
 
-export function executeShot(scene, bases, startBase, angle, powerValue, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver, onComplete, playerId, VISION_RADIUS) {
+export function executeShot(scene, bases, startBase, angle, powerValue, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver, onComplete, playerId, VISION_RADIUS, speedMultiplier = 1) {
     const normal = startBase.position.clone().normalize();
     let baseVector = new THREE.Vector3(1, 0, 0);
     if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
@@ -23,6 +23,13 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
     
     const distance = 0.3 + powerValue * 0.15;
     const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(distance)).normalize().multiplyScalar(PLANET_RADIUS);
+
+    // Если скорость ИИ 100, то выстрел мгновенный
+    if (speedMultiplier >= 100) {
+        handleLanding(scene, bases, targetPos, startBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver); 
+        if (onComplete) onComplete();
+        return;
+    }
 
     let projectileColor = 0xffaa00;
     if (moduleToBuild === 'bomb') projectileColor = 0xff0000;
@@ -34,7 +41,8 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
     scene.add(projectile);
 
     const startTime = performance.now();
-    const duration = 1000;
+    // Базовая длительность 1000мс, делим на скорость
+    const duration = 1000 / speedMultiplier; 
     
     const travelDistance = startBase.position.distanceTo(targetPos);
     const maxHeight = Math.min(travelDistance * 0.2, 0.4);
@@ -78,6 +86,8 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
     animateFlight();
 }
 
+// ... остальной код combat.js без изменений ...
+// (handleLanding, checkLineIntersection, explode, showDamageText)
 export function checkLineIntersection(bases, startPos, endPos, parentBase) {
     const midPoint = startPos.clone().lerp(endPos, 0.5);
     const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + 0.3);
@@ -188,7 +198,6 @@ function showDamageText(scene, position, damage) {
     
     const normal = position.clone().normalize();
     sprite.position.copy(position).add(normal.multiplyScalar(0.3));
-    
     sprite.scale.set(0.5, 0.25, 1);
     scene.add(sprite);
 
