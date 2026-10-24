@@ -8,6 +8,9 @@ const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "h
 renderer.setPixelRatio(1); 
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(0x000000, 1);
+
+// СКРЫВАЕМ ХОЛСТ, ЧТОБЫ ОН НЕ НАГРУЖАЛ КОМПОЗИТОР БРАУЗЕРА
+renderer.domElement.style.display = 'none'; 
 document.body.appendChild(renderer.domElement);
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); 
@@ -46,10 +49,10 @@ window.addEventListener('resize', () => {
 let lastFrameTime = 0;
 const fpsLimit = 60;
 const interval = 1000 / fpsLimit;
-let isLoopRunning = false; // Флаг запущенного цикла
+let isLoopRunning = false; 
 
 function animate(time) {
-    if (!isLoopRunning) return; // Останавливаем цикл, если игра не запущена
+    if (!isLoopRunning) return; 
 
     requestAnimationFrame(animate);
 
@@ -66,8 +69,9 @@ function animate(time) {
     renderer.render(scene, camera);
 }
 
-// Запускаем цикл ТОЛЬКО по событию из game.js
+// Запускаем цикл и показываем холст ТОЛЬКО при старте игры
 window.addEventListener('startGameRender', () => {
+    renderer.domElement.style.display = 'block'; // Показываем холст
     if (!isLoopRunning) {
         isLoopRunning = true;
         requestAnimationFrame(animate);
