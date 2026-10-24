@@ -1,6 +1,8 @@
 export const uiElements = {
     turnText: document.getElementById('turn-text'),
     energyText: document.getElementById('energy-text'),
+    topInfo: document.getElementById('top-info'),
+    waitingScreen: document.getElementById('waiting-screen'),
     bottomPanel: document.getElementById('bottom-panel'),
     uiPanel: document.getElementById('ui-panel'),
     spinBtn: document.getElementById('spin-btn'),
@@ -13,6 +15,7 @@ export const uiElements = {
     startScreen: document.getElementById('start-screen'),
     startBtn: document.getElementById('start-btn'),
     aiCountInput: document.getElementById('ai-count'),
+    aiSpeedSelect: document.getElementById('ai-speed'),
     rotateLeft: document.getElementById('rotate-left'),
     rotateRight: document.getElementById('rotate-right')
 };
