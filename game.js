@@ -23,6 +23,7 @@ let hasSpunThisTurn = false;
 let selectedModuleType = null; 
 let gameOver = false;
 let isAITurn = false;
+let aiSpeedMultiplier = 1; // Глобальная скорость ИИ
 
 let currentCameraAzimuth = 0; 
 let fogMat, fogMesh;
@@ -322,7 +323,8 @@ function setupEventListeners() {
                     (owner) => endGame(owner),
                     () => updateFogOfWar(),
                     1, 
-                    VISION_RADIUS
+                    VISION_RADIUS,
+                    aiSpeedMultiplier
                 );
             } else if (power > 0) {
                 window.showMessage("ВНИМАНИЕ", "Не хватает энергии!");
@@ -334,6 +336,8 @@ function setupEventListeners() {
         const aiCount = parseInt(uiElements.aiCountInput.value) || 1;
         totalPlayers = 1 + aiCount;
         
+        aiSpeedMultiplier = parseFloat(uiElements.aiSpeedSelect.value) || 1;
+
         for (let i = 1; i <= totalPlayers; i++) {
             playerEnergy[i] = 0;
             playerGenerators[i] = 0;
@@ -428,10 +432,13 @@ function endTurn() {
     uiElements.spinBtn.classList.add('pulse');
     uiElements.spinBtn.innerText = '⚡';
 
-    updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
     updateFogOfWar(); 
 
+    // СКРЫВАЕМ/ПОКАЗЫВАЕМ ИНТЕРФЕЙС В ЗАВИСИМОСТИ ОТ ХОДА
     if (currentPlayer > 1) {
+        uiElements.topInfo.style.display = 'none';
+        uiElements.waitingScreen.style.display = 'flex';
+        
         isAITurn = true;
         uiElements.bottomPanel.style.pointerEvents = 'none';
         uiElements.bottomPanel.style.opacity = '0.5';
@@ -441,10 +448,15 @@ function endTurn() {
             onTurnEnd: endTurn,
             onGameOver: endGame,
             onGeneratorBuilt: (genCount) => {},
-            updateUI: () => updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors),
-            updateFog: updateFogOfWar
+            updateUI: () => {}, // Боты больше не обновляют энергию на экране
+            updateFog: updateFogOfWar,
+            speedMultiplier: aiSpeedMultiplier
         });
     } else {
+        uiElements.topInfo.style.display = 'block';
+        uiElements.waitingScreen.style.display = 'none';
+        updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
+
         isAITurn = false;
         uiElements.bottomPanel.style.pointerEvents = 'auto';
         uiElements.bottomPanel.style.opacity = '1';
@@ -467,7 +479,6 @@ function endGame(owner) {
 }
 
 function startGame() {
-    // ОТПРАВЛЯЕМ СИГНАЛ ДЛЯ ЗАПУСКА РЕНДЕРА В MAIN.JS
     window.dispatchEvent(new Event('startGameRender'));
 
     const sizeFactor = parseFloat(document.getElementById('planet-size').value);
