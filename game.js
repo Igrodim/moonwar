@@ -318,14 +318,13 @@ function setupEventListeners() {
                 
                 selectedBase.aimAngle = currentAngle;
 
-                // ФИКС: Игрок всегда стреляет со скоростью 1 (обычной)
                 executeShot(scene, bases, selectedBase, check.snappedAngle, power, selectedModuleType, check.sector, playerGenerators, 
                     (genCount) => window.showMessage("УСПЕХ", `Генератор построен! Твоя выработка: от ${5 + genCount} до ${8 + genCount}`),
                     (owner) => endGame(owner),
                     () => updateFogOfWar(),
                     1, 
                     VISION_RADIUS,
-                    1 // <--- ВСЕГДА 1
+                    1 
                 );
             } else if (power > 0) {
                 window.showMessage("ВНИМАНИЕ", "Не хватает энергии!");
