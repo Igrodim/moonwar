@@ -92,7 +92,6 @@ export function checkLineIntersection(bases, startPos, endPos, parentBase, power
     const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + 0.3);
     const newCurve = new THREE.QuadraticBezierCurve3(startPos, controlPoint, endPos);
     
-    // ДИНАМИЧЕСКОЕ КОЛИЧЕСТВО ТОЧЕК (зависит от силы выстрела)
     const numPoints = Math.max(10, Math.floor(powerValue * 10));
     const newPoints = newCurve.getPoints(numPoints);
 
@@ -104,7 +103,6 @@ export function checkLineIntersection(bases, startPos, endPos, parentBase, power
         
         for (let i = 3; i < newPoints.length; i++) {
             for (let j = 0; j < existingPoints.length; j++) {
-                // УМЕНЬШЕННЫЙ РАДИУС (было 0.25, стало 0.05)
                 if (newPoints[i].distanceTo(existingPoints[j]) < 0.05) return true;
             }
         }
