@@ -13,14 +13,12 @@ document.body.appendChild(renderer.domElement);
 
 // ПАНЕЛЬ ПРОФИЛИРОВАНИЯ
 const infoPanel = document.createElement('div');
-// Подняли z-index до 3000, чтобы панель была поверх всего
 infoPanel.style.cssText = 'position:absolute; top:10px; right:10px; color:#0f0; font-family:monospace; font-size:14px; background:rgba(0,0,0,0.8); padding:10px; z-index:3000; display:none; border: 1px solid #0f0; border-radius: 5px; pointer-events: none;';
 document.body.appendChild(infoPanel);
-console.log("Профилировщик создан. Нажми P для отображения.");
 
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); 
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); 
 scene.add(ambientLight);
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.0); 
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.6); 
 dirLight.position.set(5, 3, 5); 
 scene.add(dirLight);
 
@@ -87,15 +85,10 @@ function animate(time) {
     renderer.render(scene, camera);
 }
 
-// ИСПРАВЛЕНИЕ: Добавлена русская буква 'з'
 window.addEventListener('keydown', (e) => {
     const key = e.key.toLowerCase();
     if (key === 'p' || key === 'з') {
-        if (infoPanel.style.display === 'none') {
-            infoPanel.style.display = 'block';
-        } else {
-            infoPanel.style.display = 'none';
-        }
+        infoPanel.style.display = infoPanel.style.display === 'none' ? 'block' : 'none';
     }
 });
 
