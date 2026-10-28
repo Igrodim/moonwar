@@ -1,4 +1,4 @@
-import { PLANET_RADIUS, playerColors, getGeometry, layFlatOnSphere, VISION_RADIUS, createHealthBar, setPlanetRadius, updateHealthBar } from './entities.js';
+import { PLANET_RADIUS, playerColors, getGeometry, layFlatOnSphere, VISION_RADIUS, createHealthBar, setPlanetRadius, updateHealthBar, setGlobalFogUniforms } from './entities.js';
 import { executeShot, canShoot } from './combat.js';
 import { playAITurn } from './ai.js';
 import { uiElements, updateUI, clearSelection } from './ui.js';
@@ -170,6 +170,9 @@ function setupFogOfWar() {
     fogMesh = new THREE.Mesh(fogGeo, fogMat);
     fogMesh.renderOrder = 999;
     scene.add(fogMesh);
+
+    // ПЕРЕДАЕМ ДАННЫЕ ТУМАНА В entities.js
+    setGlobalFogUniforms(fogMat.uniforms.uSources);
 }
 
 export function updateFogOfWar() {
@@ -205,7 +208,8 @@ export function updateFogOfWar() {
         }
 
         base.mesh.visible = inVision;
-        if (base.lineMesh) base.lineMesh.visible = inVision && (base.parent ? base.parent.mesh.visible : false);
+        // ФИКС: Делаем линию видимой. Шейдер сам обрежет её по туману.
+        if (base.lineMesh) base.lineMesh.visible = inVision; 
         if (base.domeMesh) base.domeMesh.visible = inVision;
         if (base.healthSprite) base.healthSprite.visible = inVision;
     });
