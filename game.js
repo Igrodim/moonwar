@@ -39,6 +39,9 @@ let cameraMoveStartTarget = new THREE.Vector3();
 let cameraMoveStartUp = new THREE.Vector3();
 let isCameraMoving = false;
 
+// ПРЕДОХРАНИТЕЛЬ
+let aiTurnTimeout = null;
+
 export function initGame(_scene, _camera, _controls) {
     scene = _scene;
     camera = _camera;
@@ -115,9 +118,8 @@ export function smoothCenterCameraOnBase(base) {
 }
 
 export function focusCameraOnTarget(targetPos) {
-    // Просто центрируем камеру на точке атаки
     const normal = targetPos.clone().normalize();
-    const dist = 10; // Приближаем камеру для обзора атаки
+    const dist = 10; 
 
     let baseTangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
     if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
@@ -198,7 +200,6 @@ function setupFogOfWar() {
 }
 
 export function getDynamicSpeed(targetPos) {
-    // Если цель в зоне видимости Игрока 1, возвращаем 1. Иначе - выбранную скорость.
     const myBases = bases.filter(b => b.owner === 1);
     for (let b of myBases) {
         if (b.position.distanceTo(targetPos) < (b.visionRadius || VISION_RADIUS)) {
@@ -300,6 +301,7 @@ function cycleBase(direction) {
 }
 
 function selectBase(base) {
+    if (!base) return;
     selectedBase = base;
     smoothCenterCameraOnBase(selectedBase);
     
@@ -474,6 +476,12 @@ function spinEnergy() {
 function endTurn() {
     if (gameOver) return;
     
+    // СБРАСЫВАЕМ ПРЕДОХРАНИТЕЛЬ
+    if (aiTurnTimeout) {
+        clearTimeout(aiTurnTimeout);
+        aiTurnTimeout = null;
+    }
+
     bases.forEach(b => {
         if (b.type === 'dome') {
             b.shieldHits = 0;
@@ -506,11 +514,21 @@ function endTurn() {
     updateFogOfWar(); 
 
     if (currentPlayer > 1) {
-        // УБРАЛИ СКРЫТИЕ ИНТЕРФЕЙСА
         isAITurn = true;
         uiElements.bottomPanel.style.pointerEvents = 'none';
         uiElements.bottomPanel.style.opacity = '0.5';
         
+        // СТАВИМ ПРЕДОХРАНИТЕЛЬ: Если ИИ зависнет, ход передастся обратно через 15 секунд
+        aiTurnTimeout = setTimeout(() => {
+            if (isAITurn) {
+                console.warn("AI Turn Timeout! Forcing end turn.");
+                isAITurn = false;
+                uiElements.bottomPanel.style.pointerEvents = 'auto';
+                uiElements.bottomPanel.style.opacity = '1';
+                endTurn(); 
+            }
+        }, 15000);
+
         playAITurn({
             scene, camera, controls, bases, currentPlayer, playerEnergy, playerGenerators, PLANET_RADIUS,
             onTurnEnd: endTurn,
@@ -523,6 +541,7 @@ function endTurn() {
             focusCamera: focusCameraOnTarget
         });
     } else {
+        isAITurn = false;
         uiElements.bottomPanel.style.pointerEvents = 'auto';
         uiElements.bottomPanel.style.opacity = '1';
 
@@ -539,6 +558,7 @@ function endTurn() {
 
 function endGame(owner) {
     gameOver = true;
+    if (aiTurnTimeout) clearTimeout(aiTurnTimeout);
     window.showMessage("ИГРА ОКОНЧЕНА", `Победил Игрок ${owner}!`);
     setTimeout(() => { location.reload(); }, 4000);
 }
