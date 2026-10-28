@@ -29,6 +29,12 @@ export function layFlatOnSphere(mesh, position) {
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
 }
 
+// ПЕРЕМЕННАЯ ДЛЯ ПЕРЕДАЧИ ДАННЫХ ТУМАНА В ШЕЙДЕР ЛИНИЙ
+let globalFogUniforms = null;
+export function setGlobalFogUniforms(uniforms) {
+    globalFogUniforms = uniforms;
+}
+
 export function createHealthBar(scene, base) {
     const canvas = document.createElement('canvas');
     canvas.width = 64;
@@ -38,17 +44,9 @@ export function createHealthBar(scene, base) {
     const tex = new THREE.CanvasTexture(canvas);
     tex.minFilter = THREE.LinearFilter; 
     
-    // ФИКС: depthTest: false заставляет полоску рисоваться поверх куполов
-    const mat = new THREE.SpriteMaterial({ 
-        map: tex, 
-        depthTest: false, 
-        depthWrite: false, 
-        transparent: true 
-    });
+    const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false, transparent: true });
     const sprite = new THREE.Sprite(mat);
     sprite.scale.set(0.15, 0.04, 1); 
-    
-    // ФИКС: renderOrder 1000 гарантирует, что полоска отрисуется последней
     sprite.renderOrder = 1000;
     
     const normal = base.position.clone().normalize();
@@ -95,6 +93,40 @@ export function createEnergyLine(scene, startPos, endPos, owner) {
     const tubeMaterial = new THREE.MeshStandardMaterial({ 
         color: playerColors[owner - 1], emissive: playerColors[owner - 1], emissiveIntensity: 0.5, roughness: 0.4, metalness: 0.8
     });
+
+    // МАГИЯ: Внедряем шейдер, который обрезает линию по границе тумана
+    tubeMaterial.onBeforeCompile = (shader) => {
+        shader.uniforms.uSources = globalFogUniforms || { value: Array(32).fill(null).map(() => new THREE.Vector4(0,0,0,-1)) };
+        
+        shader.vertexShader = shader.vertexShader.replace(
+            '#include <common>',
+            '#include <common>\nvarying vec3 vWorldPos;'
+        ).replace(
+            '#include <begin_vertex>',
+            '#include <begin_vertex>\nvWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;'
+        );
+
+        shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <common>',
+            '#include <common>\nvarying vec3 vWorldPos;\nuniform vec4 uSources[32];'
+        ).replace(
+            'void main() {',
+            `void main() {
+                vec3 normPos = normalize(vWorldPos);
+                float fogAlpha = 0.0;
+                for(int i = 0; i < 32; i++) {
+                    if (uSources[i].w > 0.0) {
+                        vec3 src = normalize(uSources[i].xyz);
+                        float dist = distance(normPos, src);
+                        float localAlpha = 1.0 - smoothstep(uSources[i].w, uSources[i].w + 0.03, dist);
+                        fogAlpha = max(fogAlpha, localAlpha);
+                    }
+                }
+                if (fogAlpha < 0.05) discard; // Отрезаем пиксели, ушедшие в туман
+            `
+        );
+    };
+    
     const tube = new THREE.Mesh(tubeGeometry, tubeMaterial);
     scene.add(tube);
     return { tube, curve };
