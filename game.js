@@ -553,11 +553,27 @@ function endTurn() {
     }
 }
 
-function endGame(owner) {
-    gameOver = true;
-    if (aiTurnTimeout) clearTimeout(aiTurnTimeout);
-    window.showMessage("ИГРА ОКОНЧЕНА", `Победил Игрок ${owner}!`);
-    setTimeout(() => { location.reload(); }, 4000);
+function endGame(destroyedOwner) {
+    const remainingHubs = bases.filter(b => b.type === 'hub');
+    const remainingOwners = [...new Set(remainingHubs.map(b => b.owner))];
+    
+    if (remainingOwners.length === 1) {
+        gameOver = true;
+        if (aiTurnTimeout) clearTimeout(aiTurnTimeout);
+        
+        if (remainingOwners[0] === 1) {
+            window.showMessage("ПОБЕДА!", "Вы уничтожили всех противников!");
+        } else {
+            window.showMessage("ПОРАЖЕНИЕ", `Вас уничтожил Игрок ${remainingOwners[0]}!`);
+        }
+        setTimeout(() => { location.reload(); }, 4000);
+    } 
+    else if (remainingOwners.length === 0) {
+        gameOver = true;
+        if (aiTurnTimeout) clearTimeout(aiTurnTimeout);
+        window.showMessage("ИГРА ОКОНЧЕНА", `Все игроки уничтожены!`);
+        setTimeout(() => { location.reload(); }, 4000);
+    }
 }
 
 function startGame() {
