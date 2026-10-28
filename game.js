@@ -39,7 +39,6 @@ let cameraMoveStartTarget = new THREE.Vector3();
 let cameraMoveStartUp = new THREE.Vector3();
 let isCameraMoving = false;
 
-// ПРЕДОХРАНИТЕЛЬ
 let aiTurnTimeout = null;
 
 export function initGame(_scene, _camera, _controls) {
@@ -476,7 +475,6 @@ function spinEnergy() {
 function endTurn() {
     if (gameOver) return;
     
-    // СБРАСЫВАЕМ ПРЕДОХРАНИТЕЛЬ
     if (aiTurnTimeout) {
         clearTimeout(aiTurnTimeout);
         aiTurnTimeout = null;
@@ -518,7 +516,6 @@ function endTurn() {
         uiElements.bottomPanel.style.pointerEvents = 'none';
         uiElements.bottomPanel.style.opacity = '0.5';
         
-        // СТАВИМ ПРЕДОХРАНИТЕЛЬ: Если ИИ зависнет, ход передастся обратно через 15 секунд
         aiTurnTimeout = setTimeout(() => {
             if (isAITurn) {
                 console.warn("AI Turn Timeout! Forcing end turn.");
