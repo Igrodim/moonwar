@@ -11,10 +11,12 @@ renderer.setClearColor(0x000000, 1);
 renderer.domElement.style.display = 'none'; 
 document.body.appendChild(renderer.domElement);
 
-// ПАНЕЛЬ ПРОФИЛИРОВАНИЯ (Включается на клавишу P)
+// ПАНЕЛЬ ПРОФИЛИРОВАНИЯ
 const infoPanel = document.createElement('div');
-infoPanel.style.cssText = 'position:absolute; top:10px; right:10px; color:#0f0; font-family:monospace; font-size:12px; background:rgba(0,0,0,0.5); padding:5px; z-index:1000; display:none;';
+// Подняли z-index до 3000, чтобы панель была поверх всего
+infoPanel.style.cssText = 'position:absolute; top:10px; right:10px; color:#0f0; font-family:monospace; font-size:14px; background:rgba(0,0,0,0.8); padding:10px; z-index:3000; display:none; border: 1px solid #0f0; border-radius: 5px; pointer-events: none;';
 document.body.appendChild(infoPanel);
+console.log("Профилировщик создан. Нажми P для отображения.");
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); 
 scene.add(ambientLight);
@@ -44,7 +46,6 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// АДАПТИВНОЕ КАЧЕСТВО
 let lastFrameTime = 0;
 const fpsLimit = 60;
 const interval = 1000 / fpsLimit;
@@ -68,7 +69,6 @@ function animate(time) {
         frameCount = 0;
         lastFpsUpdate = time;
         
-        // Если FPS падает ниже 45, снижаем качество
         if (fps < 45 && currentPixelRatio > 0.75) {
             currentPixelRatio -= 0.25;
             renderer.setPixelRatio(currentPixelRatio);
@@ -87,9 +87,15 @@ function animate(time) {
     renderer.render(scene, camera);
 }
 
+// ИСПРАВЛЕНИЕ: Добавлена русская буква 'з'
 window.addEventListener('keydown', (e) => {
-    if (e.key.toLowerCase() === 'p') {
-        infoPanel.style.display = infoPanel.style.display === 'none' ? 'block' : 'none';
+    const key = e.key.toLowerCase();
+    if (key === 'p' || key === 'з') {
+        if (infoPanel.style.display === 'none') {
+            infoPanel.style.display = 'block';
+        } else {
+            infoPanel.style.display = 'none';
+        }
     }
 });
 
