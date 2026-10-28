@@ -10,124 +10,127 @@ export function playAITurn(gameContext) {
     playerEnergy[currentPlayer] += rolledEnergy;
 
     const performAIAction = () => {
-        if (playerEnergy[currentPlayer] < 1) { setTimeout(onTurnEnd, 1000 / speedMultiplier); return; }
+        try {
+            if (playerEnergy[currentPlayer] < 1) { setTimeout(onTurnEnd, 1000 / speedMultiplier); return; }
 
-        let myBases = bases.filter(b => b.owner === currentPlayer && (b.type === 'hub' || b.type === 'relay'));
-        if (myBases.length === 0) { setTimeout(onTurnEnd, 1000 / speedMultiplier); return; }
+            let myBases = bases.filter(b => b.owner === currentPlayer && (b.type === 'hub' || b.type === 'relay'));
+            if (myBases.length === 0) { setTimeout(onTurnEnd, 1000 / speedMultiplier); return; }
 
-        let startBase = myBases[Math.floor(Math.random() * myBases.length)];
+            let startBase = myBases[Math.floor(Math.random() * myBases.length)];
 
-        let visibleEnemies = [];
-        for (let enemy of bases) {
-            if (enemy.owner === currentPlayer) continue;
-            for (let ally of myBases) {
-                const radius = ally.visionRadius || VISION_RADIUS;
-                if (ally.position.distanceTo(enemy.position) < radius) { visibleEnemies.push(enemy); break; }
-            }
-        }
-
-        let module = 'bomb';
-        let cost = 1;
-        let bestAngle = 0;
-        let allowed = false;
-        let check;
-        let targetBase = null;
-
-        if (visibleEnemies.length > 0) {
-            targetBase = visibleEnemies.reduce((prev, curr) => {
-                return (curr.position.distanceTo(startBase.position) < prev.position.distanceTo(startBase.position)) ? curr : prev;
-            });
-
-            const distToEnemy = startBase.position.distanceTo(targetBase.position);
-            const maxRange = 10 * 0.15; 
-
-            if (distToEnemy < maxRange) {
-                if (playerEnergy[currentPlayer] >= 3) { module = 'homing'; cost = 3; }
-                else { module = 'bomb'; cost = 1; }
-            } else {
-                if (playerEnergy[currentPlayer] >= 7) { module = 'relay'; cost = 7; }
-                else { module = 'bomb'; cost = 1; }
-            }
-        } else {
-            if (playerEnergy[currentPlayer] >= 7) {
-                module = Math.random() > 0.3 ? 'relay' : 'generator'; 
-                cost = 7;
-            } else {
-                module = 'bomb'; 
-                cost = 1;
-            }
-        }
-
-        if (targetBase) {
-            const normal = startBase.position.clone().normalize();
-            const toEnemy = targetBase.position.clone().sub(startBase.position);
-            const tangentDir = toEnemy.clone().sub(normal.clone().multiplyScalar(toEnemy.dot(normal))).normalize();
-            
-            let baseVector = new THREE.Vector3(1, 0, 0);
-            if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
-            let baseTangent = baseVector.cross(normal).normalize();
-            
-            let angleRad = Math.atan2(tangentDir.dot(new THREE.Vector3().crossVectors(normal, baseTangent)), tangentDir.dot(baseTangent));
-            bestAngle = THREE.MathUtils.radToDeg(angleRad);
-        } else { bestAngle = Math.random() * 360; }
-
-        for (let i = 0; i < 16; i++) {
-            let testAngle = bestAngle + (i * 22.5);
-            check = canShoot(bases, startBase, testAngle, module);
-            
-            if (check.allowed) {
-                if (['relay', 'generator'].includes(module)) {
-                    const normal = startBase.position.clone().normalize();
-                    let baseVector = new THREE.Vector3(1, 0, 0);
-                    if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
-                    let tangent = baseVector.cross(normal).normalize();
-                    tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(check.snappedAngle));
-                    
-                    const dist = 10 * 0.15;
-                    const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(dist)).normalize().multiplyScalar(PLANET_RADIUS);
-
-                    if (!checkLineIntersection(bases, startBase.position, targetPos)) {
-                        allowed = true;
-                        bestAngle = check.snappedAngle;
-                        break; 
-                    }
-                } else {
-                    allowed = true;
-                    bestAngle = check.snappedAngle;
-                    break;
+            let visibleEnemies = [];
+            for (let enemy of bases) {
+                if (enemy.owner === currentPlayer) continue;
+                for (let ally of myBases) {
+                    const radius = ally.visionRadius || VISION_RADIUS;
+                    if (ally.position.distanceTo(enemy.position) < radius) { visibleEnemies.push(enemy); break; }
                 }
             }
-        }
 
-        if (allowed && playerEnergy[currentPlayer] >= cost) {
-            playerEnergy[currentPlayer] -= cost;
+            let module = 'bomb';
+            let cost = 1;
+            let bestAngle = 0;
+            let allowed = false;
+            let check;
+            let targetBase = null;
 
-            let power = ['relay', 'generator'].includes(module) ? 10 : 8;
-            
-            // Вычисляем точку удара
-            const normal = startBase.position.clone().normalize();
-            let baseVector = new THREE.Vector3(1, 0, 0);
-            if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
-            let tangent = baseVector.cross(normal).normalize();
-            tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(bestAngle));
-            const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(0.3 + power * 0.15)).normalize().multiplyScalar(PLANET_RADIUS);
+            if (visibleEnemies.length > 0) {
+                targetBase = visibleEnemies.reduce((prev, curr) => {
+                    return (curr.position.distanceTo(startBase.position) < prev.position.distanceTo(startBase.position)) ? curr : prev;
+                });
 
-            // Берем скорость на основе видимости
-            const currentSpeed = getDynamicSpeed ? getDynamicSpeed(targetPos) : speedMultiplier;
+                const distToEnemy = startBase.position.distanceTo(targetBase.position);
+                const maxRange = 10 * 0.15; 
 
-            // Если бьет по базе Игрока 1, наводим камеру
-            if (targetBase && targetBase.owner === 1 && focusCamera) {
-                focusCamera(targetBase.position);
+                if (distToEnemy < maxRange) {
+                    if (playerEnergy[currentPlayer] >= 3) { module = 'homing'; cost = 3; }
+                    else { module = 'bomb'; cost = 1; }
+                } else {
+                    if (playerEnergy[currentPlayer] >= 7) { module = 'relay'; cost = 7; }
+                    else { module = 'bomb'; cost = 1; }
+                }
+            } else {
+                if (playerEnergy[currentPlayer] >= 7) {
+                    module = Math.random() > 0.3 ? 'relay' : 'generator'; 
+                    cost = 7;
+                } else {
+                    module = 'bomb'; 
+                    cost = 1;
+                }
             }
 
-            executeShot(scene, bases, startBase, bestAngle, power, module, check.sector, playerGenerators, onGeneratorBuilt, onGameOver, () => {
-                if (updateFog) updateFog(); 
-                setTimeout(performAIAction, 1000 / currentSpeed); 
-            }, currentPlayer, VISION_RADIUS, currentSpeed);
-            
-        } else {
-            setTimeout(onTurnEnd, 1000 / speedMultiplier);
+            if (targetBase) {
+                const normal = startBase.position.clone().normalize();
+                const toEnemy = targetBase.position.clone().sub(startBase.position);
+                const tangentDir = toEnemy.clone().sub(normal.clone().multiplyScalar(toEnemy.dot(normal))).normalize();
+                
+                let baseVector = new THREE.Vector3(1, 0, 0);
+                if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
+                let baseTangent = baseVector.cross(normal).normalize();
+                
+                let angleRad = Math.atan2(tangentDir.dot(new THREE.Vector3().crossVectors(normal, baseTangent)), tangentDir.dot(baseTangent));
+                bestAngle = THREE.MathUtils.radToDeg(angleRad);
+            } else { bestAngle = Math.random() * 360; }
+
+            for (let i = 0; i < 16; i++) {
+                let testAngle = bestAngle + (i * 22.5);
+                check = canShoot(bases, startBase, testAngle, module);
+                
+                if (check.allowed) {
+                    if (['relay', 'generator'].includes(module)) {
+                        const normal = startBase.position.clone().normalize();
+                        let baseVector = new THREE.Vector3(1, 0, 0);
+                        if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
+                        let tangent = baseVector.cross(normal).normalize();
+                        tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(check.snappedAngle));
+                        
+                        const dist = 10 * 0.15;
+                        const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(dist)).normalize().multiplyScalar(PLANET_RADIUS);
+
+                        if (!checkLineIntersection(bases, startBase.position, targetPos)) {
+                            allowed = true;
+                            bestAngle = check.snappedAngle;
+                            break; 
+                        }
+                    } else {
+                        allowed = true;
+                        bestAngle = check.snappedAngle;
+                        break;
+                    }
+                }
+            }
+
+            if (allowed && playerEnergy[currentPlayer] >= cost) {
+                playerEnergy[currentPlayer] -= cost;
+
+                let power = ['relay', 'generator'].includes(module) ? 10 : 8;
+                
+                const normal = startBase.position.clone().normalize();
+                let baseVector = new THREE.Vector3(1, 0, 0);
+                if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
+                let tangent = baseVector.cross(normal).normalize();
+                tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(bestAngle));
+                const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(0.3 + power * 0.15)).normalize().multiplyScalar(PLANET_RADIUS);
+
+                const currentSpeed = getDynamicSpeed ? getDynamicSpeed(targetPos) : speedMultiplier;
+
+                if (targetBase && targetBase.owner === 1 && focusCamera) {
+                    focusCamera(targetBase.position);
+                }
+
+                executeShot(scene, bases, startBase, bestAngle, power, module, check.sector, playerGenerators, onGeneratorBuilt, onGameOver, () => {
+                    if (updateFog) updateFog(); 
+                    setTimeout(performAIAction, 1000 / currentSpeed); 
+                }, currentPlayer, VISION_RADIUS, currentSpeed);
+                
+            } else {
+                setTimeout(onTurnEnd, 1000 / speedMultiplier);
+            }
+        } catch (error) {
+            console.error("Ошибка в логике ИИ:", error);
+            setTimeout(onTurnEnd, 1000); // В случае ошибки принудительно завершаем ход
         }
     };
+    
     setTimeout(() => { performAIAction(); }, 1500 / speedMultiplier);
 }
