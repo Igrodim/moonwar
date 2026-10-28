@@ -29,6 +29,7 @@ let currentCameraAzimuth = 0;
 let fogMat, fogMesh;
 let currentPlanet = null;
 
+// Переменные для плавной камеры
 let cameraTargetPos = new THREE.Vector3();
 let cameraTargetLookAt = new THREE.Vector3();
 let cameraTargetUp = new THREE.Vector3();
@@ -55,7 +56,6 @@ export function initGame(_scene, _camera, _controls) {
 }
 
 export function updateCameraTilt() {
-    // Добавили проверку isAITurn, чтобы камера не боролась с фокусом на атаке
     if (!selectedBase || isCameraMoving || isAITurn) return; 
     
     const target = selectedBase.position;
@@ -119,13 +119,24 @@ export function smoothCenterCameraOnBase(base) {
 
 export function focusCameraOnTarget(targetPos) {
     const normal = targetPos.clone().normalize();
-    const dist = 12; // Дистанция обзора атаки
+
+    // Вычисляем ТЕКУЩУЮ дистанцию от камеры до поверхности планеты
+    const currentRadius = camera.position.length();
+    const planetRadius = targetPos.length();
+    let dist = currentRadius - planetRadius;
+
+    // Защита от нулевых или слишком больших значений (если камера внутри планеты)
+    if (dist < 2) dist = 15; 
+    if (dist > 60) dist = 25; 
 
     let baseTangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
     if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
     let tangent = baseTangent.applyAxisAngle(normal, currentCameraAzimuth);
-    const targetPhi = THREE.MathUtils.degToRad(20); // Угол обзора
+    
+    // Угол обзора атаки (25 градусов)
+    const targetPhi = THREE.MathUtils.degToRad(25); 
 
+    // Новая позиция камеры сохраняет ту же высоту над планетой
     const offset = normal.clone().multiplyScalar(Math.cos(targetPhi) * dist)
                          .add(tangent.clone().multiplyScalar(Math.sin(targetPhi) * dist));
                          
@@ -143,15 +154,16 @@ export function focusCameraOnTarget(targetPos) {
 
 export function updateCameraAnimation() {
     if (isCameraMoving) {
-        cameraMoveProgress += 0.05; // Чуть медленнее для плавности
+        cameraMoveProgress += 0.04; // Плавная скорость полета
         if (cameraMoveProgress >= 1) {
             cameraMoveProgress = 1;
             isCameraMoving = false;
         }
         
+        // Плавная кривая (ease-in-out)
         let t = cameraMoveProgress * cameraMoveProgress * (3 - 2 * cameraMoveProgress);
         
-        // 1. Сферическая интерполяция позиции камеры (облет планеты по дуге)
+        // 1. Сферическая интерполяция позиции (камера облетает планету по дуге, не пролетая сквозь неё)
         const startPosNorm = cameraMoveStartPos.clone().normalize();
         const targetPosNorm = cameraTargetPos.clone().normalize();
         
@@ -166,7 +178,7 @@ export function updateCameraAnimation() {
         // 2. Интерполяция цели взгляда
         controls.target.lerpVectors(cameraMoveStartTarget, cameraTargetLookAt, t);
         
-        // 3. Сферическая интерполяция вектора UP (защита от переворота камеры)
+        // 3. Сферическая интерполяция вектора UP (защита от переворота камеры вверх ногами)
         const startUp = cameraMoveStartUp.clone().normalize();
         const targetUp = cameraTargetUp.clone().normalize();
         const qUp = new THREE.Quaternion().setFromUnitVectors(startUp, targetUp);
