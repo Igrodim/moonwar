@@ -2,14 +2,12 @@ import { canShoot, executeShot, checkLineIntersection } from './combat.js';
 import { PLANET_RADIUS, VISION_RADIUS } from './entities.js';
 
 export function playAITurn(gameContext) {
-    const { scene, camera, controls, bases, currentPlayer, playerEnergy, playerGenerators, onTurnEnd, onGameOver, onGeneratorBuilt, updateFog, speedMultiplier } = gameContext;
+    const { scene, camera, controls, bases, currentPlayer, playerEnergy, playerGenerators, onTurnEnd, onGameOver, onGeneratorBuilt, updateFog, speedMultiplier, getDynamicSpeed, focusCamera } = gameContext;
 
     const minRoll = 5 + playerGenerators[currentPlayer];
     const maxRoll = 8 + playerGenerators[currentPlayer];
     const rolledEnergy = Math.floor(Math.random() * (maxRoll - minRoll + 1)) + minRoll;
     playerEnergy[currentPlayer] += rolledEnergy;
-    
-    // Больше не обновляем UI
 
     const performAIAction = () => {
         if (playerEnergy[currentPlayer] < 1) { setTimeout(onTurnEnd, 1000 / speedMultiplier); return; }
@@ -105,11 +103,27 @@ export function playAITurn(gameContext) {
             playerEnergy[currentPlayer] -= cost;
 
             let power = ['relay', 'generator'].includes(module) ? 10 : 8;
+            
+            // Вычисляем точку удара
+            const normal = startBase.position.clone().normalize();
+            let baseVector = new THREE.Vector3(1, 0, 0);
+            if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
+            let tangent = baseVector.cross(normal).normalize();
+            tangent.applyAxisAngle(normal, THREE.MathUtils.degToRad(bestAngle));
+            const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(0.3 + power * 0.15)).normalize().multiplyScalar(PLANET_RADIUS);
+
+            // Берем скорость на основе видимости
+            const currentSpeed = getDynamicSpeed ? getDynamicSpeed(targetPos) : speedMultiplier;
+
+            // Если бьет по базе Игрока 1, наводим камеру
+            if (targetBase && targetBase.owner === 1 && focusCamera) {
+                focusCamera(targetBase.position);
+            }
 
             executeShot(scene, bases, startBase, bestAngle, power, module, check.sector, playerGenerators, onGeneratorBuilt, onGameOver, () => {
                 if (updateFog) updateFog(); 
-                setTimeout(performAIAction, 1000 / speedMultiplier); 
-            }, currentPlayer, VISION_RADIUS, speedMultiplier);
+                setTimeout(performAIAction, 1000 / currentSpeed); 
+            }, currentPlayer, VISION_RADIUS, currentSpeed);
             
         } else {
             setTimeout(onTurnEnd, 1000 / speedMultiplier);
