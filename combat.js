@@ -1,4 +1,5 @@
 import { PLANET_RADIUS, AAO_RADIUS, createNewBase, destroyBaseAndChain, updateHealthBar } from './entities.js';
+import { projectilePool, explosionPool, damageTextPool } from './pool.js';
 
 export function canShoot(bases, startBase, angle, moduleToBuild) {
     const ANGLE_STEP = 11.25; 
@@ -24,7 +25,6 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
     const distance = 0.3 + powerValue * 0.15;
     const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(distance)).normalize().multiplyScalar(PLANET_RADIUS);
 
-    // Если скорость ИИ 100, то выстрел мгновенный
     if (speedMultiplier >= 100) {
         handleLanding(scene, bases, targetPos, startBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver); 
         if (onComplete) onComplete();
@@ -36,12 +36,13 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
     if (moduleToBuild === 'homing') projectileColor = 0xff00ff; 
     if (moduleToBuild === 'drone') projectileColor = 0x00ffff; 
 
-    const projectile = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), new THREE.MeshBasicMaterial({ color: projectileColor }));
+    const projectile = projectilePool.get();
+    projectile.visible = true;
+    projectile.material.color.setHex(projectileColor);
     projectile.position.copy(startBase.position);
     scene.add(projectile);
 
     const startTime = performance.now();
-    // Базовая длительность 1000мс, делим на скорость
     const duration = 1000 / speedMultiplier; 
     
     const travelDistance = startBase.position.distanceTo(targetPos);
@@ -69,7 +70,7 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
                         b.isActive = false;
                         b.mesh.material.color.setHex(0x555555); 
                         explode(scene, bases, projectile.position, 0, 0.1, null, onGameOver); 
-                        scene.remove(projectile);
+                        projectilePool.release(projectile); 
                         if (onComplete) onComplete();
                         return; 
                     }
@@ -78,7 +79,7 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
             projectile.position.copy(flightCurve.getPoint(t));
             requestAnimationFrame(animateFlight);
         } else {
-            scene.remove(projectile);
+            projectilePool.release(projectile); 
             handleLanding(scene, bases, targetPos, startBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver); 
             if (onComplete) onComplete();
         }
@@ -86,8 +87,6 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
     animateFlight();
 }
 
-// ... остальной код combat.js без изменений ...
-// (handleLanding, checkLineIntersection, explode, showDamageText)
 export function checkLineIntersection(bases, startPos, endPos, parentBase) {
     const midPoint = startPos.clone().lerp(endPos, 0.5);
     const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + 0.3);
@@ -148,9 +147,10 @@ function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, secto
 }
 
 export function explode(scene, bases, pos, damage, radius, owner, onGameOver) {
-    const explosionGeo = new THREE.SphereGeometry(0.1, 16, 16);
-    const explosionMat = new THREE.MeshBasicMaterial({ color: 0xff5500, transparent: true, opacity: 1 });
-    const explosion = new THREE.Mesh(explosionGeo, explosionMat);
+    const explosion = explosionPool.get();
+    explosion.visible = true;
+    explosion.scale.set(1, 1, 1);
+    explosion.material.opacity = 1;
     
     const explosionCenter = pos.clone().normalize().multiplyScalar(PLANET_RADIUS);
     explosion.position.copy(explosionCenter);
@@ -164,11 +164,12 @@ export function explode(scene, bases, pos, damage, radius, owner, onGameOver) {
         const t = elapsed / duration;
 
         if (t >= 1) {
-            scene.remove(explosion); explosionGeo.dispose(); explosionMat.dispose(); return;
+            explosionPool.release(explosion); 
+            return;
         }
         const scale = 1 + t * 3;
         explosion.scale.set(scale, scale, scale);
-        explosionMat.opacity = 1 - t;
+        explosion.material.opacity = 1 - t;
         requestAnimationFrame(animateExplosion);
     }
     animateExplosion();
@@ -186,27 +187,32 @@ export function explode(scene, bases, pos, damage, radius, owner, onGameOver) {
 }
 
 function showDamageText(scene, position, damage) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 128; canvas.height = 64;
-    const context = canvas.getContext('2d');
-    context.fillStyle = '#ff0000'; context.font = 'bold 40px Arial'; context.textAlign = 'center';
-    context.fillText(`-${damage}`, 64, 40);
-
-    const texture = new THREE.CanvasTexture(canvas);
-    const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
-    const sprite = new THREE.Sprite(material);
+    const sprite = damageTextPool.get();
+    sprite.visible = true;
+    sprite.userData.life = 1;
+    
+    const ctx = sprite.userData.ctx;
+    ctx.clearRect(0, 0, 128, 64);
+    ctx.fillStyle = '#ff0000'; 
+    ctx.font = 'bold 40px Arial'; 
+    ctx.textAlign = 'center';
+    ctx.fillText(`-${damage}`, 64, 40);
+    sprite.userData.tex.needsUpdate = true;
     
     const normal = position.clone().normalize();
     sprite.position.copy(position).add(normal.multiplyScalar(0.3));
     sprite.scale.set(0.5, 0.25, 1);
+    sprite.material.opacity = 1;
     scene.add(sprite);
 
-    let life = 1;
     const animateText = () => {
-        if (life <= 0) { scene.remove(sprite); texture.dispose(); material.dispose(); return; }
-        life -= 0.02;
+        if (sprite.userData.life <= 0) {
+            damageTextPool.release(sprite);
+            return;
+        }
+        sprite.userData.life -= 0.02;
         sprite.position.add(normal.clone().multiplyScalar(0.01)); 
-        sprite.material.opacity = life;
+        sprite.material.opacity = sprite.userData.life;
         requestAnimationFrame(animateText);
     };
     animateText();
