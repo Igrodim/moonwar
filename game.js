@@ -79,7 +79,7 @@ export function updateCameraTilt() {
     }
 }
 
-function smoothCenterCameraOnBase(base) {
+export function smoothCenterCameraOnBase(base) {
     if (!base) return;
 
     const normal = base.position.clone().normalize();
@@ -104,6 +104,31 @@ function smoothCenterCameraOnBase(base) {
                          
     cameraTargetPos.copy(base.position).add(offset);
     cameraTargetLookAt.copy(base.position);
+    cameraTargetUp.copy(normal); 
+    
+    cameraMoveStartPos.copy(camera.position);
+    cameraMoveStartTarget.copy(controls.target);
+    cameraMoveStartUp.copy(camera.up);
+    
+    cameraMoveProgress = 0;
+    isCameraMoving = true;
+}
+
+export function focusCameraOnTarget(targetPos) {
+    // Просто центрируем камеру на точке атаки
+    const normal = targetPos.clone().normalize();
+    const dist = 10; // Приближаем камеру для обзора атаки
+
+    let baseTangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
+    if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
+    let tangent = baseTangent.applyAxisAngle(normal, currentCameraAzimuth);
+    const targetPhi = THREE.MathUtils.degToRad(10);
+
+    const offset = normal.clone().multiplyScalar(Math.cos(targetPhi) * dist)
+                         .add(tangent.clone().multiplyScalar(Math.sin(targetPhi) * dist));
+                         
+    cameraTargetPos.copy(targetPos).add(offset);
+    cameraTargetLookAt.copy(targetPos);
     cameraTargetUp.copy(normal); 
     
     cameraMoveStartPos.copy(camera.position);
@@ -172,6 +197,17 @@ function setupFogOfWar() {
     scene.add(fogMesh);
 }
 
+export function getDynamicSpeed(targetPos) {
+    // Если цель в зоне видимости Игрока 1, возвращаем 1. Иначе - выбранную скорость.
+    const myBases = bases.filter(b => b.owner === 1);
+    for (let b of myBases) {
+        if (b.position.distanceTo(targetPos) < (b.visionRadius || VISION_RADIUS)) {
+            return 1;
+        }
+    }
+    return aiSpeedMultiplier;
+}
+
 export function updateFogOfWar() {
     if (gameOver) return;
     const myBases = bases.filter(b => b.owner === 1);
@@ -191,7 +227,7 @@ export function updateFogOfWar() {
             base.mesh.visible = true;
             if (base.lineMesh) {
                 base.lineMesh.visible = true;
-                base.lineMesh.geometry.setDrawRange(0, Infinity); // Свои линии видны всегда полностью
+                base.lineMesh.geometry.setDrawRange(0, Infinity);
             }
             if (base.domeMesh) base.domeMesh.visible = true;
             if (base.healthSprite) base.healthSprite.visible = true;
@@ -211,17 +247,14 @@ export function updateFogOfWar() {
         if (base.domeMesh) base.domeMesh.visible = inVision;
         if (base.healthSprite) base.healthSprite.visible = inVision;
 
-        // МАТЕМАТИЧЕСКАЯ ОБРЕЗКА ЛИНИИ
         if (base.lineMesh) {
             if (!inVision) {
                 base.lineMesh.visible = false;
             } else {
                 base.lineMesh.visible = true;
-                
-                const points = base.curve.getPoints(100); // 101 точка на линии
+                const points = base.curve.getPoints(100);
                 let firstVisibleIndex = 100;
                 
-                // Идем от модуля (конца линии) к базе (началу)
                 for (let i = points.length - 1; i >= 0; i--) {
                     let p = points[i];
                     let pointInVision = false;
@@ -235,13 +268,10 @@ export function updateFogOfWar() {
                     if (pointInVision) {
                         firstVisibleIndex = i;
                     } else {
-                        // Как только встретили невидимую точку, идущую перед видимыми, останавливаемся
                         break; 
                     }
                 }
                 
-                // Отрисовываем от firstVisibleIndex до конца
-                // 48 индексов на один сегмент линии (8 радиальных * 6 индексов на грань)
                 const indicesPerSegment = 48;
                 const startIndex = firstVisibleIndex * indicesPerSegment;
                 const count = (points.length - 1 - firstVisibleIndex) * indicesPerSegment;
@@ -476,9 +506,7 @@ function endTurn() {
     updateFogOfWar(); 
 
     if (currentPlayer > 1) {
-        uiElements.topInfo.style.display = 'none';
-        uiElements.waitingScreen.style.display = 'flex';
-        
+        // УБРАЛИ СКРЫТИЕ ИНТЕРФЕЙСА
         isAITurn = true;
         uiElements.bottomPanel.style.pointerEvents = 'none';
         uiElements.bottomPanel.style.opacity = '0.5';
@@ -490,14 +518,11 @@ function endTurn() {
             onGeneratorBuilt: (genCount) => {},
             updateUI: () => {}, 
             updateFog: updateFogOfWar,
-            speedMultiplier: aiSpeedMultiplier
+            speedMultiplier: aiSpeedMultiplier,
+            getDynamicSpeed: getDynamicSpeed,
+            focusCamera: focusCameraOnTarget
         });
     } else {
-        uiElements.topInfo.style.display = 'block';
-        uiElements.waitingScreen.style.display = 'none';
-        updateUI(currentPlayer, playerEnergy[currentPlayer], playerColors);
-
-        isAITurn = false;
         uiElements.bottomPanel.style.pointerEvents = 'auto';
         uiElements.bottomPanel.style.opacity = '1';
 
