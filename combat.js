@@ -91,17 +91,18 @@ export function checkLineIntersection(bases, startPos, endPos, parentBase) {
     const midPoint = startPos.clone().lerp(endPos, 0.5);
     const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + 0.3);
     const newCurve = new THREE.QuadraticBezierCurve3(startPos, controlPoint, endPos);
-    const newPoints = newCurve.getPoints(20);
+    
+    const newPoints = newCurve.getPoints(100);
 
     for (let b of bases) {
         if (!b.parent || !b.curve) continue; 
         if (b.parent === parentBase) continue; 
-        const existingPoints = b.curve.getPoints(20);
-        for (let p1 of newPoints) {
-            if (p1.distanceTo(startPos) < 0.25) continue; 
-            for (let p2 of existingPoints) {
-                if (p2.distanceTo(startPos) < 0.25) continue; 
-                if (p1.distanceTo(p2) < 0.06) return true;
+        
+        const existingPoints = b.curve.getPoints(100);
+        for (let i = 0; i < newPoints.length; i++) {
+            if (i < 10) continue; 
+            for (let j = 0; j < existingPoints.length; j++) {
+                if (newPoints[i].distanceTo(existingPoints[j]) < 0.25) return true;
             }
         }
     }
