@@ -1,4 +1,4 @@
-export let PLANET_RADIUS = 10; // ТОЛЬКО ЭТО МЕНЯЕТСЯ
+export let PLANET_RADIUS = 10; 
 export const BASE_HEIGHT = 0.1;
 export const DOME_RADIUS = 0.35;
 export const AAO_RADIUS = 0.35; 
@@ -38,10 +38,18 @@ export function createHealthBar(scene, base) {
     const tex = new THREE.CanvasTexture(canvas);
     tex.minFilter = THREE.LinearFilter; 
     
-    const mat = new THREE.SpriteMaterial({ map: tex, depthTest: true, depthWrite: false, transparent: true });
+    // ФИКС: depthTest: false заставляет полоску рисоваться поверх куполов
+    const mat = new THREE.SpriteMaterial({ 
+        map: tex, 
+        depthTest: false, 
+        depthWrite: false, 
+        transparent: true 
+    });
     const sprite = new THREE.Sprite(mat);
-    
     sprite.scale.set(0.15, 0.04, 1); 
+    
+    // ФИКС: renderOrder 1000 гарантирует, что полоска отрисуется последней
+    sprite.renderOrder = 1000;
     
     const normal = base.position.clone().normalize();
     sprite.position.copy(base.position).add(normal.clone().multiplyScalar(0.2));
@@ -51,7 +59,6 @@ export function createHealthBar(scene, base) {
     base.healthCtx = ctx;
     base.healthTex = tex;
     scene.add(sprite);
-    
     updateHealthBar(base);
 }
 
@@ -90,7 +97,6 @@ export function createEnergyLine(scene, startPos, endPos, owner) {
     });
     const tube = new THREE.Mesh(tubeGeometry, tubeMaterial);
     scene.add(tube);
-    
     return { tube, curve };
 }
 
