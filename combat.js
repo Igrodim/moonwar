@@ -26,7 +26,7 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
     const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(distance)).normalize().multiplyScalar(PLANET_RADIUS);
 
     if (speedMultiplier >= 100) {
-        handleLanding(scene, bases, targetPos, startBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver); 
+        handleLanding(scene, bases, targetPos, startBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver, powerValue); 
         if (onComplete) onComplete();
         return;
     }
@@ -80,36 +80,39 @@ export function executeShot(scene, bases, startBase, angle, powerValue, moduleTo
             requestAnimationFrame(animateFlight);
         } else {
             projectilePool.release(projectile); 
-            handleLanding(scene, bases, targetPos, startBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver); 
+            handleLanding(scene, bases, targetPos, startBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver, powerValue); 
             if (onComplete) onComplete();
         }
     }
     animateFlight();
 }
 
-export function checkLineIntersection(bases, startPos, endPos, parentBase) {
+export function checkLineIntersection(bases, startPos, endPos, parentBase, powerValue = 10) {
     const midPoint = startPos.clone().lerp(endPos, 0.5);
     const controlPoint = midPoint.clone().normalize().multiplyScalar(PLANET_RADIUS + 0.3);
     const newCurve = new THREE.QuadraticBezierCurve3(startPos, controlPoint, endPos);
     
-    const newPoints = newCurve.getPoints(100);
+    // ДИНАМИЧЕСКОЕ КОЛИЧЕСТВО ТОЧЕК (зависит от силы выстрела)
+    const numPoints = Math.max(10, Math.floor(powerValue * 10));
+    const newPoints = newCurve.getPoints(numPoints);
 
     for (let b of bases) {
         if (!b.parent || !b.curve) continue; 
         if (b.parent === parentBase) continue; 
         
         const existingPoints = b.curve.getPoints(100);
-        for (let i = 0; i < newPoints.length; i++) {
-            if (i < 10) continue; 
+        
+        for (let i = 3; i < newPoints.length; i++) {
             for (let j = 0; j < existingPoints.length; j++) {
-                if (newPoints[i].distanceTo(existingPoints[j]) < 0.25) return true;
+                // УМЕНЬШЕННЫЙ РАДИУС (было 0.25, стало 0.05)
+                if (newPoints[i].distanceTo(existingPoints[j]) < 0.05) return true;
             }
         }
     }
     return false;
 }
 
-function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver) {
+function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, sector, playerGenerators, onGeneratorBuilt, onGameOver, powerValue) {
     let domeInRange = bases.find(b => b.type === 'dome' && b.owner !== parentBase.owner && b.position.distanceTo(targetPos) < 0.35);
 
     if (domeInRange && !domeInRange.isDisabled) {
@@ -126,7 +129,7 @@ function handleLanding(scene, bases, targetPos, parentBase, moduleToBuild, secto
     if (moduleToBuild === 'bomb') { explode(scene, bases, targetPos, 25, 0.20, null, onGameOver); return; }
     if (moduleToBuild === 'homing') { explode(scene, bases, targetPos, 50, 0.30, null, onGameOver); return; }
 
-    if (checkLineIntersection(bases, parentBase.position, targetPos, parentBase)) {
+    if (checkLineIntersection(bases, parentBase.position, targetPos, parentBase, powerValue)) {
         explode(scene, bases, targetPos, 25, 0.30, null, onGameOver); 
         return;
     }
