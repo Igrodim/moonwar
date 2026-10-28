@@ -72,7 +72,6 @@ export function playAITurn(gameContext) {
                 bestAngle = THREE.MathUtils.radToDeg(angleRad);
             } else { bestAngle = Math.random() * 360; }
 
-            // ФИКС: Выносим power наверх, чтобы передать в checkLineIntersection
             let power = ['relay', 'generator'].includes(module) ? 10 : 8;
 
             for (let i = 0; i < 16; i++) {
@@ -90,7 +89,6 @@ export function playAITurn(gameContext) {
                         const dist = 10 * 0.15;
                         const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(dist)).normalize().multiplyScalar(PLANET_RADIUS);
 
-                        // Передаем power в проверку
                         if (!checkLineIntersection(bases, startBase.position, targetPos, startBase, power)) {
                             allowed = true;
                             bestAngle = check.snappedAngle;
@@ -107,7 +105,6 @@ export function playAITurn(gameContext) {
             if (allowed && playerEnergy[currentPlayer] >= cost) {
                 playerEnergy[currentPlayer] -= cost;
 
-                // Убираем повторное объявление power здесь
                 const normal = startBase.position.clone().normalize();
                 let baseVector = new THREE.Vector3(1, 0, 0);
                 if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
