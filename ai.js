@@ -72,6 +72,9 @@ export function playAITurn(gameContext) {
                 bestAngle = THREE.MathUtils.radToDeg(angleRad);
             } else { bestAngle = Math.random() * 360; }
 
+            // ФИКС: Выносим power наверх, чтобы передать в checkLineIntersection
+            let power = ['relay', 'generator'].includes(module) ? 10 : 8;
+
             for (let i = 0; i < 16; i++) {
                 let testAngle = bestAngle + (i * 22.5);
                 check = canShoot(bases, startBase, testAngle, module);
@@ -87,7 +90,8 @@ export function playAITurn(gameContext) {
                         const dist = 10 * 0.15;
                         const targetPos = startBase.position.clone().add(tangent.clone().multiplyScalar(dist)).normalize().multiplyScalar(PLANET_RADIUS);
 
-                        if (!checkLineIntersection(bases, startBase.position, targetPos)) {
+                        // Передаем power в проверку
+                        if (!checkLineIntersection(bases, startBase.position, targetPos, startBase, power)) {
                             allowed = true;
                             bestAngle = check.snappedAngle;
                             break; 
@@ -103,8 +107,7 @@ export function playAITurn(gameContext) {
             if (allowed && playerEnergy[currentPlayer] >= cost) {
                 playerEnergy[currentPlayer] -= cost;
 
-                let power = ['relay', 'generator'].includes(module) ? 10 : 8;
-                
+                // Убираем повторное объявление power здесь
                 const normal = startBase.position.clone().normalize();
                 let baseVector = new THREE.Vector3(1, 0, 0);
                 if (Math.abs(normal.y) > 0.9) baseVector.set(0, 0, 1);
@@ -128,7 +131,7 @@ export function playAITurn(gameContext) {
             }
         } catch (error) {
             console.error("Ошибка в логике ИИ:", error);
-            setTimeout(onTurnEnd, 1000); // В случае ошибки принудительно завершаем ход
+            setTimeout(onTurnEnd, 1000); 
         }
     };
     
