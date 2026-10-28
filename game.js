@@ -55,7 +55,8 @@ export function initGame(_scene, _camera, _controls) {
 }
 
 export function updateCameraTilt() {
-    if (!selectedBase || isCameraMoving) return;
+    // Добавили проверку isAITurn, чтобы камера не боролась с фокусом на атаке
+    if (!selectedBase || isCameraMoving || isAITurn) return; 
     
     const target = selectedBase.position;
     const normal = target.clone().normalize();
@@ -118,12 +119,12 @@ export function smoothCenterCameraOnBase(base) {
 
 export function focusCameraOnTarget(targetPos) {
     const normal = targetPos.clone().normalize();
-    const dist = 10; 
+    const dist = 12; // Дистанция обзора атаки
 
     let baseTangent = new THREE.Vector3(1, 0, 0).cross(normal).normalize();
     if (baseTangent.lengthSq() < 0.1) baseTangent.set(0, 0, 1).cross(normal).normalize();
     let tangent = baseTangent.applyAxisAngle(normal, currentCameraAzimuth);
-    const targetPhi = THREE.MathUtils.degToRad(10);
+    const targetPhi = THREE.MathUtils.degToRad(20); // Угол обзора
 
     const offset = normal.clone().multiplyScalar(Math.cos(targetPhi) * dist)
                          .add(tangent.clone().multiplyScalar(Math.sin(targetPhi) * dist));
@@ -142,7 +143,7 @@ export function focusCameraOnTarget(targetPos) {
 
 export function updateCameraAnimation() {
     if (isCameraMoving) {
-        cameraMoveProgress += 0.08; 
+        cameraMoveProgress += 0.05; // Чуть медленнее для плавности
         if (cameraMoveProgress >= 1) {
             cameraMoveProgress = 1;
             isCameraMoving = false;
@@ -150,9 +151,28 @@ export function updateCameraAnimation() {
         
         let t = cameraMoveProgress * cameraMoveProgress * (3 - 2 * cameraMoveProgress);
         
-        camera.position.lerpVectors(cameraMoveStartPos, cameraTargetPos, t);
+        // 1. Сферическая интерполяция позиции камеры (облет планеты по дуге)
+        const startPosNorm = cameraMoveStartPos.clone().normalize();
+        const targetPosNorm = cameraTargetPos.clone().normalize();
+        
+        const qPos = new THREE.Quaternion().setFromUnitVectors(startPosNorm, targetPosNorm);
+        const partialQPos = new THREE.Quaternion().slerp(qPos, t); 
+        
+        const currentOffset = cameraMoveStartPos.clone().applyQuaternion(partialQPos);
+        const currentRadius = cameraMoveStartPos.length() * (1 - t) + cameraTargetPos.length() * t;
+        
+        camera.position.copy(currentOffset.normalize().multiplyScalar(currentRadius));
+        
+        // 2. Интерполяция цели взгляда
         controls.target.lerpVectors(cameraMoveStartTarget, cameraTargetLookAt, t);
-        camera.up.lerpVectors(cameraMoveStartUp, cameraTargetUp, t).normalize();
+        
+        // 3. Сферическая интерполяция вектора UP (защита от переворота камеры)
+        const startUp = cameraMoveStartUp.clone().normalize();
+        const targetUp = cameraTargetUp.clone().normalize();
+        const qUp = new THREE.Quaternion().setFromUnitVectors(startUp, targetUp);
+        const partialQUp = new THREE.Quaternion().slerp(qUp, t);
+        
+        camera.up.copy(startUp.applyQuaternion(partialQUp).normalize());
     }
 }
 
